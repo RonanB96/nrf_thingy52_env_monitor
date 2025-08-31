@@ -2,14 +2,29 @@
 
 ## Project Architecture Overview
 
-This is a **Nordic nRF Connect SDK** (NCS) project for **Nordic Thingy:52** environmental monitoring with **Bluetooth Low Energy (BLE)** advertising. The system is optimized for **ultra-low power consumption** targeting months of battery life. Note: Bluetooth Mesh functionality exists in legacy files but is no longer actively developed or compiled.
+This is a **Nordic nRF Connect SDK v3.0.2** project for **Nordic Thingy:52** environmental monitoring with **Bluetooth Low Energy (BLE)** advertising. The system is optimized for **ultra-low power consumption** targeting months of battery life. Note: Bluetooth Mesh functionality exists in legacy files but is no longer actively developed or compiled.
 
 ### Core Architecture Components
 
 - **Sensor Manager** (`sensor_manager.c`): Central hub managing HTS221 (temp/humidity), LPS22HB (pressure), CCS811 (air quality), and battery monitoring with power-optimized one-shot sampling
 - **BLE Services**: Environmental Sensing Service (ESS), Battery Service, and Uptime Service for BLE connectivity
+- **Main Application** (`main.c`): BLE advertising mode initialization and coordination
 - **Power Management**: SX1509B GPIO expander controls sensor power with device tree initialization priorities
-- **Legacy**: Mesh models exist in codebase but are not actively compiled or maintained
+- **Legacy**: Mesh models exist in codebase (`main_mesh.c`, `model_handler_env.c`) but are not actively compiled or maintained
+
+### BLE Service Architecture
+
+**Environmental Sensing Service (ESS)** (`ess_service.c`):
+- Standard BLE ESS (UUID 0x181A) with temperature, humidity, pressure, CO2, TVOC characteristics
+- On-demand sensor reading: triggers fresh data collection when characteristics are read
+- Optimized for responsive BLE client requests with fallback to cached data
+
+**Battery Service** (`ble_battery_service.c`):
+- Standard BLE BAS (UUID 0x180F) with battery level and charging status
+- Extended Battery Level State (BLS) characteristic for detailed power information
+- Real-time charging detection and state management
+
+**Integration Pattern**: Each service calls `sensor_manager_*` functions for data access, enabling both cached and fresh readings based on BLE client requirements.
 
 ## Critical Development Knowledge
 
@@ -35,47 +50,42 @@ sx1509b-reset-hog {
 
 ### Build & Development Workflow
 
+**West Workspace Configuration**: This project uses a self-contained West workspace with NCS v3.0.2:
 ```bash
-# Standard build for Thingy:52
-west build -b thingy52 -p
+# Environment automatically configured via West settings:
+# west config build.board thingy52/nrf52832
+# west config build.cmake-args "-DZEPHYR_TOOLCHAIN_VARIANT=zephyr -DZEPHYR_SDK_INSTALL_DIR=/path/to/sdk"
 
-# Ultra-low power mode (months battery life)
-west build -b thingy52 -p
+# Simple build commands (no environment variables needed):
+source .venv/bin/activate
+west build -p always app           # Pristine build
+west build app                     # Incremental build
+west flash                         # Flash to device
+west attach                        # Monitor serial output
 
 # Legacy mesh build (deprecated - not actively maintained)
 # west build -b thingy52 -p -- -DOVERLAY_CONFIG=mesh.conf
-### Build & Development Workflow
-
-```bash
-# Standard build for Thingy:52
-west build -b thingy52 -p
-
-# Ultra-low power mode (months battery life)
-west build -b thingy52 -p
-
-# Legacy mesh build (deprecated - not actively maintained)
-# west build -b thingy52 -p -- -DOVERLAY_CONFIG=mesh.conf
-# Flash and monitor
-west flash && west attach
 ```
 
 ### NCS/Zephyr Development Best Practices
 
-<!-- **West Workspace Management**:
-- Always build within proper NCS workspace initialized with `west init`
-- Use `west update` to sync dependencies before troubleshooting build issues
-- Check `west list` to verify module versions match expected NCS release -->
+**West Workspace Management**:
+- Project uses self-contained West workspace with `app/west.yml` manifest
+- Uses NCS v3.0.2 with path-prefix module imports (`modules/zephyr`, `modules/nrf`)
+- West configuration persists toolchain settings: `west config -l` shows current setup
+- Virtual environment (`.venv`) required with dependencies pre-installed
+- Check toolchain/Zephyr version compatibility: SDK version in `modules/zephyr/SDK_VERSION` must match installed SDK
 
 **Build System Guidelines**:
-- Use `-p` (pristine) flag for clean builds when changing configurations
+- Use `-p always` (pristine) flag for clean builds when changing configurations
 - Prefer board-specific `.conf` and `.overlay` files over modifying `prj.conf`
 - Check `build/app/zephyr/zephyr.dts` to verify device tree compilation results
 - Use `west build --cmake-only` to regenerate build files without full compilation
 
 **Code Quality & Validation Workflow**:
 - **ALWAYS lint code changes before confirming tasks**: Use `get_errors` tool to check for compile/lint errors after any file edits
-- **Build verification required**: After making C code changes, run `west build -b thingy52 app` to verify compilation success
-- **Pristine Build verification**: After making dts, cmake or kconfig code changes, run a pristine build `west build -p -b thingy52 app` to verify compilation success
+- **Build verification required**: After making C code changes, run `west build app` to verify compilation success
+- **Pristine Build verification**: After making dts, cmake or kconfig code changes, run a pristine build `west build -p always app` to verify compilation success
 - **Pre-commit validation**: Before task completion, ensure all modified files pass linting and build successfully
 - **Error-driven development**: If `get_errors` shows issues, fix them immediately before proceeding with other changes
 - **Test early, test often**: Use `west build --cmake-only` for quick syntax checking without full compilation when possible
@@ -105,8 +115,9 @@ west flash && west attach
 **Key Configuration Files**:
 - `prj.conf`: Base BLE advertising configuration
 - `boards/thingy52.conf`: Thingy:52-specific sensor and power settings
-<!-- - `mesh.conf`: Bluetooth Mesh Low Power Node (LPN) configuration -->
 - `boards/thingy52.overlay`: Device tree hardware configuration and power routing
+- `app/west.yml`: Self-contained workspace manifest for NCS v3.0.2
+- `.venv/`: Python virtual environment with required dependencies
 
 ### Debugging Patterns
 
@@ -175,7 +186,7 @@ ret = sensor_power_off();
 
 **Device Tree Dependencies**: Initialization priority is critical - I2C bus (50) → SX1509B (60) → sensors (70+). Breaking this chain causes cascading failures.
 
-**NCS Version Dependencies**: Requires nRF Connect SDK v2.7.0+ for proper Thingy:52 support and sensor drivers. Vanilla Zephyr won't work due to Nordic-specific board definitions.
+**NCS Version Dependencies**: Requires nRF Connect SDK v3.0.2+ for proper Thingy:52 support and sensor drivers. Vanilla Zephyr won't work due to Nordic-specific board definitions.
 
 ## Common Pitfalls
 

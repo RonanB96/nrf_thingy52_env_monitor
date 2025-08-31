@@ -16,11 +16,11 @@ manifest:
         file: west.yml
         path-prefix: modules
 
-    # Override Zephyr with your specific commit/branch
-    - name: zephyr
-      remote: ncs
-      path: modules/zephyr
-      revision: bbe43a52d20
+    # # Override Zephyr with your specific commit/branch
+    # - name: zephyr
+    #   remote: ncs
+    #   path: modules/zephyr
+    #   revision: 825150eccf5
 
   self:
     path: app
