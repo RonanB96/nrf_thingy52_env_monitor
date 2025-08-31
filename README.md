@@ -1,0 +1,1 @@
+# nrf_thingy52_env_monitor
