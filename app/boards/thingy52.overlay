@@ -1,0 +1,416 @@
+/*
+ * Copyright (c) 2024 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/*
+ * Thingy52 Environmental Monitor Overlay
+ * - Ensures sensors are properly configured
+ * - Disables LEDs and buttons for power savings
+ * - Uses Nordic's board.c power control approach for CCS811
+ * - Configures all GPIO pins for optimal power consumption
+ */
+
+/* Ensure ADC is enabled for battery monitoring */
+&adc {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@4 {
+		reg = <4>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)>;
+		zephyr,input-positive = <5>;  /* SAADC_CH_PSELP_PSELP_AnalogInput0 (1) + channel (4) = 5 */
+		zephyr,resolution = <14>;
+		zephyr,oversampling = <4>;    /* 4x oversampling for noise reduction like Nordic sample */
+	};
+};
+
+/* Configure GPIO0 for SX1509B reset control */
+&gpio0 {
+	status = "okay";
+};
+
+/* Ensure battery voltage monitoring is enabled */
+/ {
+	vbatt {
+		status = "okay";
+		power-on-sample-delay-us = <10000>;  /* 10ms delay after power on for voltage stabilization */
+	};
+
+	/* Battery charging detection GPIO */
+	charging {
+		compatible = "gpio-keys";
+		charge_status: charge_status {
+			gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+			label = "Battery Charge Status";
+		};
+	};
+};
+
+/*
+	CCS811 - Power Configuration
+	Keep ccs_pwr disabled due to SX1509B initialization dependency issues.
+	SX1509B pin 10 controlled via init-out-low instead.
+	Use main VDD supply for CCS811 to avoid circular dependencies.
+*/
+&ccs811 {
+	status = "okay";
+	vin-supply = <&vdd_pwr>;  /* Use main VDD power supply */
+	irq-gpios = <&gpio0 22 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+};
+
+// Enabled by turned off by default
+&spk_pwr {
+	status = "okay";
+};
+
+// Leaving disabled as the cannot be used with the IO expander
+// due to initialization timing issues
+&ccs_pwr {
+	status = "disabled";
+};
+
+&mpu_pwr {
+	status = "disabled";
+	/* IO8 - MPU power control - starts disabled (OUTPUT LOW) */
+};
+
+&mic_pwr {
+	status = "disabled";
+	/* IO9 - Microphone power control - starts disabled (OUTPUT LOW) */
+};
+
+/* SX1509B GPIO Expander - Configure initialization priority */
+&sx1509b {
+	status = "okay";
+};
+
+/* Ensure environmental sensors are enabled (they exist in base DTS but may need status = "okay") */
+&hts221 {
+	status = "okay";
+	// drdy-gpios = <&gpio0 24 GPIO_ACTIVE_LOW>;
+};
+
+&lps22hb_press {
+	status = "okay";
+};
+
+/* Disable LEDs for power savings (LEDs are controlled by SX1509B GPIO expander) */
+&led0 {
+	status = "disabled";
+};
+
+&led1 {
+	status = "disabled";
+};
+
+&led2 {
+	status = "disabled";
+};
+
+/* Disable buttons for power savings */
+&button0 {
+	status = "disabled";
+};
+
+/* Disable unused peripherals to save power */
+&spi0 {
+	status = "disabled";
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&spi2 {
+	status = "disabled";
+};
+
+/* Disable UART1 for power savings */
+// &uart1 {
+// 	status = "disabled";
+// };
+
+/* Disable PWM for power savings */
+&pwm0 {
+	status = "disabled";
+};
+
+&pwm1 {
+	status = "disabled";
+};
+
+&pwm2 {
+	status = "disabled";
+};
+
+/* Disable unused timers */
+&timer0 {
+	status = "disabled";
+};
+
+&timer1 {
+	status = "disabled";
+};
+
+&timer2 {
+	status = "disabled";
+};
+
+&timer3 {
+	status = "disabled";
+};
+
+&timer4 {
+	status = "disabled";
+};
+
+/* All timers disabled - Zephyr will use RTC for system timing */
+
+/* Disable motion sensor and its power supply for maximum power savings */
+&lis2dh12 {
+	status = "disabled";
+};
+
+/* Reduce I2C clock frequencies for power savings */
+&i2c0 {
+	clock-frequency = <100000>; /* Reduce from 400kHz to 100kHz */
+};
+
+/* Disable I2C1 - unused since motion sensor and LEDs are disabled */
+&i2c1 {
+	status = "disabled";
+};
+
+/*
+ * ============================================================================
+ * NRF52832 CPU GPIO PINOUT - THINGY52 BOARD CONFIGURATION (Official Nordic Pinout)
+ * ============================================================================
+ *
+ * Pin | Label                 | Description                                    | Configuration
+ * ----|-----------------------|------------------------------------------------|------------------
+ * P0.00| XL1                  | Low frequency crystal                          | PERIPHERAL
+ * P0.01| XL2                  | Low frequency crystal                          | PERIPHERAL
+ * P0.02| ANA/DIG0             | Analog/Digital GPIO externally available       | UART_RX (Debug)
+ * P0.03| ANA/DIG1             | Analog/Digital GPIO externally available       | UART_TX (Debug)
+ * P0.04| ANA/DIG2             | Analog/Digital GPIO externally available       | INPUT_PULLUP
+ * P0.05| SX_OSCIO             | I/O expander oscillator input line             | INPUT_PULLUP
+ * P0.06| MPU_INT              | Motion sensor interrupt line                   | INPUT_PULLDOWN
+ * P0.07| SDA                  | I2C data line                                  | I2C0_SDA
+ * P0.08| SCL                  | I2C clock line                                 | I2C0_SCL
+ * P0.09| NFC1                 | Near field communication antenna               | INPUT_PULLUP (NFC disabled)
+ * P0.10| NFC2                 | Near field communication antenna               | INPUT_PULLUP (NFC disabled)
+ * P0.11| BUTTON               | Button input                                   | INPUT_PULLUP
+ * P0.12| LIS_INT1             | Low power accelerometer interrupt line         | INPUT_PULLDOWN (disabled)
+ * P0.13| USB_DETECT           | USB detect signal                              | INPUT
+ * P0.14| SDA_EXT              | External and low power accelerometer I2C data  | INPUT_NO_BIAS (ext pullup)
+ * P0.15| SCL_EXT              | External and low power accelerometer I2C clock | INPUT_NO_BIAS (ext pullup)
+ * P0.16| SX_RESET             | I/O expander reset line                        | OUTPUT_HIGH (ext pullup)
+ * P0.17| BAT_CHG_STAT         | Battery charge status                          | INPUT (voltage divider)
+ * P0.18| MOS_1                | Gate of N-MOS transistor externally available  | INPUT_PULLUP
+ * P0.19| MOS_2                | Gate of N-MOS transistor externally available  | INPUT_PULLUP
+ * P0.20| MOS_3                | Gate of N-MOS transistor externally available  | INPUT_PULLUP
+ * P0.21| MOS_4                | Gate of N-MOS transistor externally available  | INPUT_PULLUP
+ * P0.22| CCS_INT              | Gas sensor interrupt line                      | INPUT_PULLDOWN
+ * P0.23| LPS_INT              | Pressure sensor interrupt line                 | INPUT_PULLDOWN
+ * P0.24| HTS_INT              | Humidity sensor interrupt line                 | INPUT_PULLDOWN
+ * P0.25| MIC_DOUT             | Microphone PDM data                            | INPUT_PULLDOWN (disabled)
+ * P0.26| MIC_CLK              | Microphone PDM clock                           | INPUT_PULLDOWN (disabled)
+ * P0.27| SPEAKER              | Speaker PWM signal                             | OUTPUT_LOW (disabled)
+ * P0.28| BATTERY              | Battery monitoring input                       | ADC_INPUT (AIN4)
+ * P0.29| SPK_PWR_CTRL         | Speaker amplifier power control                | OUTPUT_LOW
+ * P0.30| VDD_PWD_CTRL         | Power control for sensors, I/O expander, LEDs  | OUTPUT_HIGH
+ * P0.31| BH_INT               | Colour sensor interrupt line                   | INPUT_PULLDOWN
+ */
+
+
+/* Configure all unused nRF52832 pins for optimal power consumption */
+
+/* GPIO hogs must be children of the GPIO controller, not standalone nodes */
+&gpio0 {
+	/* SX1509B reset pin - MUST be output-high for proper operation */
+	sx1509b-reset-hog {
+		gpio-hog;
+		gpios = <16 GPIO_ACTIVE_HIGH>;   /* P0.16 SX_RESET - I/O expander reset (drive high) */
+		output-high;  /* Drive high to keep SX1509B out of reset */
+		line-name = "sx1509b-reset";
+	};
+
+	/* External GPIO pins - pullup to prevent floating */
+	external-gpio-hog {
+		gpio-hog;
+		gpios = <18 GPIO_ACTIVE_HIGH>,   /* P0.18 MOS_1 - N-MOSFET gate */
+			<19 GPIO_ACTIVE_HIGH>,   /* P0.19 MOS_2 - N-MOSFET gate */
+			<20 GPIO_ACTIVE_HIGH>,   /* P0.20 MOS_3 - N-MOSFET gate */
+			<21 GPIO_ACTIVE_HIGH>;   /* P0.21 MOS_4 - N-MOSFET gate */
+		output-high;
+		line-name = "external-gpio-pullup";
+	};
+
+	/* Disabled peripherals - pulldown to prevent leakage */
+	disabled-peripheral-hog {
+		gpio-hog;
+		gpios = <25 (GPIO_ACTIVE_LOW | GPIO_PULL_DOWN)>,    /* P0.25 MIC_DOUT - microphone PDM data (disabled) */
+			<26 (GPIO_ACTIVE_LOW | GPIO_PULL_DOWN)>,    /* P0.26 MIC_CLK - microphone PDM clock (disabled) */
+			<6 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,    /* P0.06 MPU_INT - motion sensor interrupt (disabled) */
+			<12 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,   /* P0.12 LIS_INT1 - accelerometer interrupt (disabled) */
+			<31 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,   /* P0.31 BH_INT - colour sensor interrupt */
+			<27 (GPIO_ACTIVE_LOW | GPIO_PULL_DOWN)>;    /* P0.27 SPEAKER - speaker PWM signal (disabled) */
+		input;
+		line-name = "disabled-peripheral-pulldown";
+	};
+
+	/* NFC pins - pulldown (NFC disabled for power savings) */
+	nfc-pins-hog {
+		gpio-hog;
+		gpios = <9 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,    /* P0.09 NFC1 - Near field communication antenna */
+			<10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;   /* P0.10 NFC2 - Near field communication antenna */
+		input;
+		line-name = "nfc-pins-pulldown";
+	};
+
+	/* Other unused pins - pullup to prevent floating */
+	misc-unused-hog {
+		gpio-hog;
+		gpios = <11 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;   /* P0.11 BUTTON - button input (disabled) */
+		input;
+		line-name = "misc-unused-pullup";
+	};
+
+	/* External pullup pins - no internal bias to avoid current conflict */
+	external-pullup-hog {
+		gpio-hog;
+		gpios = <14 GPIO_ACTIVE_HIGH>,   /* P0.14 SDA_EXT - external I2C data (has external pullup) */
+			<15 GPIO_ACTIVE_HIGH>;   /* P0.15 SCL_EXT - external I2C clock (has external pullup) */
+		input;
+		line-name = "external-pullup-no-bias";
+	};
+	input-plain {
+		gpio-hog;
+		gpios = <13 GPIO_ACTIVE_HIGH>;   /* P0.13 USB_DETECT - USB detect signal */
+		input;
+		line-name = "input-plain";
+	};
+};
+
+/* Configure SX1509B GPIO expander for power optimization - use Nordic's proven approach */
+&sx1509b {
+	/*
+	 * ============================================================================
+	 * THINGY52 SX1509B GPIO EXPANDER PIN CONFIGURATION (Official Nordic Pinout)
+	 * ============================================================================
+	 *
+	 * Pin | Label             | Description                                    | Configuration
+	 * ----|-------------------|------------------------------------------------|------------------
+	 * IO0 | IOEXT0            | Digital GPIO externally available             | OUTPUT_LOW (driven)
+	 * IO1 | IOEXT1            | Digital GPIO externally available             | OUTPUT_LOW (driven)
+	 * IO2 | IOEXT2            | Digital GPIO externally available             | OUTPUT_LOW (driven)
+	 * IO3 | IOEXT3            | Digital GPIO externally available             | OUTPUT_LOW (driven)
+	 * IO4 | BAT_MON_EN        | Battery monitoring enable                      | OUTPUT_LOW (disabled)
+	 * IO5 | LIGHTWELL_G       | Green color of the lightwell LEDs             | OUTPUT_HIGH (LEDs off)
+	 * IO6 | LIGHTWELL_B       | Blue color of the lightwell LEDs              | OUTPUT_HIGH (LEDs off)
+	 * IO7 | LIGHTWELL_R       | Red color of the lightwell LEDs               | OUTPUT_HIGH (LEDs off)
+	 * IO8 | MPU_PWR_CTRL      | Motion sensor power control                   | OUTPUT_LOW (power off)
+	 * IO9 | MIC_PWR_CTRL      | Microphone power control                      | OUTPUT_LOW (power off)
+	 * IO10| CCS_PWR_CTRL      | Gas sensor power control                      | OUTPUT_HIGH (power on)
+	 * IO11| CCS_RESET         | Gas sensor reset line                         | OUTPUT_LOW (in reset)
+	 * IO12| CCS_WAKE          | Gas sensor wake line                          | OUTPUT_LOW (awake)
+	 * IO13| SENSE_LED_R       | Red color of the color sensor support LED     | OUTPUT_HIGH (LED off)
+	 * IO14| SENSE_LED_G       | Green color of the color sensor support LED   | OUTPUT_HIGH (LED off)
+	 * IO15| SENSE_LED_B       | Blue color of the color sensor support LED    | OUTPUT_HIGH (LED off)
+	 *
+	 * ============================================================================
+	 */
+
+	/* Use Nordic's proven init values with power optimization - critical for early boot pin states */
+	/* This sets pin directions and initial output states during driver init */
+	init-out-high = <0xe4e0>;  /* Pins HIGH: 15,14,13,10,7,6,5 (CCS811 powered, LEDs off) */
+	init-out-low = <0x1b1f>;   /* Pins LOW: 12,11,9,8,4,3,2,1,0 (MPU/MIC power off, CCS811 control) */
+
+	/* Pin descriptions using official Nordic labels */
+	gpio-line-names =
+		"IOEXT0",            /* IO0 - Digital GPIO externally available */
+		"IOEXT1",            /* IO1 - Digital GPIO externally available */
+		"IOEXT2",            /* IO2 - Digital GPIO externally available */
+		"IOEXT3",            /* IO3 - Digital GPIO externally available */
+		"BAT_MON_EN",        /* IO4 - Battery monitoring enable */
+		"LIGHTWELL_G",       /* IO5 - Green color of the lightwell LEDs */
+		"LIGHTWELL_B",       /* IO6 - Blue color of the lightwell LEDs */
+		"LIGHTWELL_R",       /* IO7 - Red color of the lightwell LEDs */
+		"MPU_PWR_CTRL",      /* IO8 - Motion sensor power control */
+		"MIC_PWR_CTRL",      /* IO9 - Microphone power control */
+		"CCS_PWR_CTRL",      /* IO10 - Gas sensor power control */
+		"CCS_RESET",         /* IO11 - Gas sensor reset line */
+		"CCS_WAKE",          /* IO12 - Gas sensor wake line */
+		"SENSE_LED_R",       /* IO13 - Red color of the color sensor support LED */
+		"SENSE_LED_G",       /* IO14 - Green color of the color sensor support LED */
+		"SENSE_LED_B";       /* IO15 - Blue color of the color sensor support LED */
+};
+
+/* Disable RTCs if not needed for timekeeping */
+&rtc0 {
+	status = "disabled";
+};
+
+&rtc1 {
+	status = "disabled";
+};
+
+&rtc2 {
+	status = "disabled";
+};
+
+/* Disable I2S audio interface */
+&i2s0 {
+	status = "disabled";
+};
+
+/* Disable PDM microphone interface */
+&pdm0 {
+	status = "disabled";
+};
+
+/* Disable quadrature decoder */
+&qdec {
+	status = "disabled";
+};
+
+/* Disable comparator */
+&comp {
+	status = "disabled";
+};
+
+/* Disable software PWM */
+&sw_pwm {
+	status = "disabled";
+};
+
+/* Disable NFC if not used */
+&nfct {
+	status = "disabled";
+};
+
+/* Disable temperature sensor (use external HTS221 instead) */
+&temp {
+	status = "disabled";
+};
+
+/* Configure GPIO pins for optimal power consumption */
+/ {
+	/* Keep only essential sensor interrupt definitions that are actually used by drivers */
+	gpio-inputs {
+		compatible = "gpio-keys";
+
+		/* Only keep interrupt pins that are actually used by the sensor drivers */
+		lps22hb_int: lps22hb_int_23 {
+			gpios = <&gpio0 23 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+			label = "LPS22HB Interrupt";
+		};
+	};
+
+	/* Remove all other GPIO configurations - handle critical pins in board.c */
+};

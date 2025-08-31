@@ -1,0 +1,95 @@
+/*
+ * Simple device naming using hardware ID only
+ * Nordic Thingy:52 Environmental Monitor
+ *
+ * Generates unique device names like "Thingy52-A1B2C3D4"
+ * Home Assistant handles room assignment
+ *
+ * Copyright (c) 2025
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/hwinfo.h>
+#include <string.h>
+#include <stdio.h>
+#include "device_naming.h"
+
+LOG_MODULE_REGISTER(device_naming, CONFIG_LOG_DEFAULT_LEVEL);
+
+static char device_name_buffer[DEVICE_NAME_MAX_LEN];
+static bool naming_initialized = false;
+
+/**
+ * Get unique device name based on hardware ID
+ *
+ * @param name_buffer Buffer to store the device name
+ * @param buffer_size Size of the buffer
+ * @return 0 on success, negative error code on failure
+ */
+int device_naming_get_name(char *name_buffer, size_t buffer_size)
+{
+	uint8_t device_id[8];
+	ssize_t id_len;
+	uint32_t unique_id = 0;
+
+	if (!name_buffer || buffer_size < 16) {
+		return -EINVAL;
+	}
+
+	/* Return cached name if already initialized */
+	if (naming_initialized) {
+		strncpy(name_buffer, device_name_buffer, buffer_size - 1);
+		name_buffer[buffer_size - 1] = '\0';
+		return 0;
+	}
+
+	/* Get hardware device ID */
+	id_len = hwinfo_get_device_id(device_id, sizeof(device_id));
+	if (id_len <= 0) {
+		LOG_ERR("Failed to get hardware ID, using fallback");
+		snprintf(name_buffer, buffer_size, "%s-UNKNOWN", DEVICE_PREFIX);
+		return -ENODEV;
+	}
+
+	/* Create unique ID from last 4 bytes */
+	for (int i = 0; i < 4 && i < id_len; i++) {
+		unique_id |= (device_id[id_len - 1 - i] << (i * 8));
+	}
+
+	/* Format as "Thingy52-XXXXXXXX" */
+	snprintf(name_buffer, buffer_size, "%s-%08X", DEVICE_PREFIX, unique_id);
+
+	/* Cache the result */
+	strncpy(device_name_buffer, name_buffer, sizeof(device_name_buffer) - 1);
+	device_name_buffer[sizeof(device_name_buffer) - 1] = '\0';
+	naming_initialized = true;
+
+	LOG_INF("Device name: %s", name_buffer);
+	return 0;
+}
+
+/**
+ * Initialize device naming service
+ *
+ * @return 0 on success, negative error code on failure
+ */
+int device_naming_init(void)
+{
+	char temp_name[DEVICE_NAME_MAX_LEN];
+	int ret;
+
+	if (naming_initialized) {
+		return 0;
+	}
+
+	ret = device_naming_get_name(temp_name, sizeof(temp_name));
+	if (ret < 0) {
+		LOG_ERR("Failed to initialize device naming: %d", ret);
+		return ret;
+	}
+
+	LOG_INF("Device naming initialized: %s", temp_name);
+	return 0;
+}

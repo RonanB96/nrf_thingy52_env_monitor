@@ -1,0 +1,26 @@
+manifest:
+  defaults:
+    remote: ncs
+
+  remotes:
+    - name: ncs
+      url-base: https://github.com/nrfconnect
+
+  projects:
+    - name: sdk-nrf
+      remote: ncs
+      path: nrf
+      revision: v3.0.2
+      import:
+        # Import the NCS manifest with module path prefix
+        file: west.yml
+        path-prefix: modules
+
+    # Override Zephyr with your specific commit/branch
+    - name: zephyr
+      remote: ncs
+      path: modules/zephyr
+      revision: bbe43a52d20
+
+  self:
+    path: app
