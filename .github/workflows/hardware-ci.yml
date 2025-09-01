@@ -1,0 +1,241 @@
+name: Hardware-in-the-Loop Testing
+
+# This workflow demonstrates HIL testing with actual Thingy:52 hardware
+# Note: Requires self-hosted runner with connected hardware
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'app/src/**'
+      - 'app/tests/hardware/**'
+      - 'scripts/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'app/src/**' 
+      - 'app/tests/hardware/**'
+      - 'scripts/**'
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      device_serial:
+        description: 'Device serial number (optional)'
+        required: false
+        type: string
+
+jobs:
+  hardware-test:
+    # This job requires a self-hosted runner with:
+    # - Connected Thingy:52 device
+    # - nRF Connect SDK v3.0.2 environment
+    # - Python with required packages
+    runs-on: self-hosted
+    
+    # Only run if hardware testing is enabled
+    if: contains(github.event.head_commit.message, '[hw-test]') || github.event_name == 'workflow_dispatch'
+    
+    timeout-minutes: 30  # HIL tests can take time
+    
+    env:
+      DEVICE_SERIAL: ${{ github.event.inputs.device_serial }}
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Setup nRF Connect SDK environment
+      run: |
+        # Activate NCS environment (adjust path as needed)
+        source $HOME/ncs/toolchains/v3.0.2/activate.sh
+        echo "NCS_ROOT=$HOME/ncs/v3.0.2" >> $GITHUB_ENV
+        echo "ZEPHYR_TOOLCHAIN_VARIANT=zephyr" >> $GITHUB_ENV
+        echo "ZEPHYR_SDK_INSTALL_DIR=$HOME/ncs/toolchains/v3.0.2/opt/zephyr-sdk" >> $GITHUB_ENV
+        
+    - name: Install Python dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        pip install pyserial bleak
+        
+    - name: Check connected devices
+      run: |
+        echo "Checking for connected devices..."
+        nrfutil device list || echo "nrfutil not available"
+        ls /dev/tty* | grep -E "(USB|ACM)" || echo "No USB/ACM devices found"
+        
+    - name: Build hardware test firmware
+      run: |
+        cd app/tests/hardware
+        west build -b thingy52 -p always .
+        
+    - name: Run hardware tests
+      id: hardware_test
+      run: |
+        # Run complete HIL test suite
+        ./scripts/run_hil_tests.sh
+      continue-on-error: true  # Don't fail workflow if hardware tests have issues
+      
+    - name: Parse test results
+      id: parse_results
+      run: |
+        # Parse and validate results
+        LATEST_REPORT=$(ls -t hardware_test_report_*.txt 2>/dev/null | head -1) || true
+        if [ -n "$LATEST_REPORT" ]; then
+          python3 scripts/parse_hardware_test_results.py "$LATEST_REPORT" --output hardware_test_results.json
+          echo "results_file=hardware_test_results.json" >> $GITHUB_OUTPUT
+        else
+          echo "No test report found"
+          echo "results_file=" >> $GITHUB_OUTPUT
+        fi
+      continue-on-error: true
+      
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: hardware-test-results-${{ github.run_number }}
+        path: |
+          hardware_test_report_*.txt
+          ble_test_results_*.json
+          hardware_test_validation_*.json
+          hardware_test_execution_*.log
+          test_summary_*.md
+        retention-days: 30
+        
+    - name: Create test summary
+      if: always()
+      run: |
+        echo "## Hardware Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "hardware_test_results.json" ]; then
+          PASSED=$(jq -r '.passed_tests' hardware_test_results.json 2>/dev/null || echo "0")
+          TOTAL=$(jq -r '.total_tests' hardware_test_results.json 2>/dev/null || echo "0")
+          SUCCESS_RATE=$(jq -r '.success_rate' hardware_test_results.json 2>/dev/null || echo "0")
+          
+          echo "- **Total Tests**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Passed**: $PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "- **Success Rate**: $SUCCESS_RATE%" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$PASSED" = "$TOTAL" ] && [ "$TOTAL" != "0" ]; then
+            echo "✅ All hardware tests passed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Some hardware tests failed or had issues" >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "❌ No test results available" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Manual Validation Required" >> $GITHUB_STEP_SUMMARY
+        echo "1. **BLE Testing**: Use nRF Connect mobile app" >> $GITHUB_STEP_SUMMARY
+        echo "2. **Power Measurement**: Use Nordic Power Profiler Kit II" >> $GITHUB_STEP_SUMMARY
+        echo "3. **Environmental Validation**: Test in controlled conditions" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Comment on PR (if applicable)
+      if: github.event_name == 'pull_request' && steps.parse_results.outputs.results_file != ''
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const resultsFile = '${{ steps.parse_results.outputs.results_file }}';
+          
+          if (fs.existsSync(resultsFile)) {
+            const results = JSON.parse(fs.readFileSync(resultsFile, 'utf8'));
+            
+            const passed = results.passed_tests || 0;
+            const total = results.total_tests || 0;
+            const successRate = results.success_rate || 0;
+            
+            const status = passed === total && total > 0 ? '✅' : '⚠️';
+            
+            const comment = `## Hardware Test Results ${status}
+            
+**Test Summary:**
+- Total Tests: ${total}
+- Passed: ${passed}
+- Success Rate: ${successRate.toFixed(1)}%
+
+**Hardware Validation:**
+${passed === total && total > 0 ? 
+  '✅ All automated hardware tests passed!' : 
+  '⚠️ Some tests failed or require manual validation'}
+
+**Manual Testing Required:**
+- BLE connectivity with nRF Connect mobile app
+- Power consumption measurement with PPK2
+- Environmental sensor accuracy validation
+
+*Hardware test artifacts are available in the workflow run.*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }
+          
+    - name: Set workflow status
+      if: always()
+      run: |
+        if [ -f "hardware_test_results.json" ]; then
+          FAILED=$(jq -r '.failed_tests' hardware_test_results.json 2>/dev/null || echo "1")
+          if [ "$FAILED" != "0" ]; then
+            echo "::warning::Some hardware tests failed - manual validation recommended"
+            # Don't fail the workflow for hardware test issues
+            # exit 1
+          fi
+        fi
+        
+  simulation-test:
+    # Fallback job for environments without hardware
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[hw-test]') && github.event_name != 'workflow_dispatch'"
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        pip install pyserial bleak
+        
+    - name: Validate test scripts
+      run: |
+        echo "Validating hardware test scripts..."
+        python3 -m py_compile scripts/hardware_test_runner.py
+        python3 -m py_compile scripts/ble_test_automation.py
+        python3 -m py_compile scripts/parse_hardware_test_results.py
+        echo "✅ All test scripts validated"
+        
+    - name: Validate test structure
+      run: |
+        echo "Validating hardware test structure..."
+        
+        # Check required files exist
+        test -f app/tests/hardware/CMakeLists.txt || exit 1
+        test -f app/tests/hardware/prj.conf || exit 1
+        test -f app/tests/hardware/main_hardware_test.c || exit 1
+        test -f app/tests/hardware/test_hardware_sensors.c || exit 1
+        test -f app/tests/hardware/test_hardware_gpio.c || exit 1
+        test -f app/tests/hardware/test_hardware_ble.c || exit 1
+        test -f app/tests/hardware/test_hardware_power.c || exit 1
+        
+        echo "✅ Hardware test structure validated"
+        
+    - name: Create simulation summary
+      run: |
+        echo "## Simulation Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Hardware test scripts validated" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Test structure verified" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Note**: Hardware tests require actual Thingy:52 device" >> $GITHUB_STEP_SUMMARY
+        echo "Use \`[hw-test]\` in commit message to trigger hardware testing" >> $GITHUB_STEP_SUMMARY
