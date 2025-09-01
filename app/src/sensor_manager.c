@@ -216,8 +216,8 @@ int sensor_manager_init(void)
 
 	/* Initialize LPS22HB driver */
 	if (device_is_ready(lps22hb_dev)) {
-		const struct gpio_dt_spec lps22hb_int_pin = GPIO_DT_SPEC_GET(DT_NODELABEL(lps22hb_int), gpios);
-		ret = lps22hb_driver_init(i2c_dev, &lps22hb_int_pin);
+		/* Note: lps22hb_int node not available in device tree, using NULL for interrupt pin */
+		ret = lps22hb_driver_init(i2c_dev, NULL);
 		if (ret != 0) {
 			LOG_ERR("Failed to initialize LPS22HB driver: %d", ret);
 		} else {

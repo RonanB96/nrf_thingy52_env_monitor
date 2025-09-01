@@ -54,15 +54,15 @@ static bool ess_service_found = false;
 static bool battery_service_found = false;
 static bool uptime_service_found = false;
 
-/* ESS Service UUID (0x181A) */
-BT_UUID_DECLARE_16(ess_uuid, BT_UUID_ESS_VAL);
+/* ESS Service UUID (0x181A) - for reference */
+/* static struct bt_uuid_16 ess_uuid = BT_UUID_INIT_16(BT_UUID_ESS_VAL); */
 
-/* Battery Service UUID (0x180F) */  
-BT_UUID_DECLARE_16(battery_uuid, BT_UUID_BAS_VAL);
+/* Battery Service UUID (0x180F) - for reference */  
+/* static struct bt_uuid_16 battery_uuid = BT_UUID_INIT_16(BT_UUID_BAS_VAL); */
 
-/* Custom Uptime Service UUID */
-BT_UUID_DECLARE_128(uptime_uuid, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
-                    0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF);
+/* Custom Uptime Service UUID - for reference */
+/* static struct bt_uuid_128 uptime_uuid = BT_UUID_INIT_128(
+    BT_UUID_128_ENCODE(0x01234567, 0x89AB, 0xCDEF, 0x0123, 0x456789ABCDEF)); */
 
 /**
  * @brief Record BLE test result for reporting
@@ -130,6 +130,16 @@ void test_hardware_ble_advertising_visibility(void)
 {
     LOG_INF("=== Testing BLE Advertising Visibility ===");
     
+    /* Dummy sensor data for advertising tests */
+    struct ble_sensor_data dummy_data = {
+        .temperature = 23.5,
+        .humidity = 45.0,
+        .pressure = 1013.25,
+        .eco2 = 400,
+        .tvoc = 0,
+        .battery_level = 85
+    };
+    
     /* Test 1: BLE subsystem initialization */
     int ret = bt_enable(NULL);
     if (ret != 0) {
@@ -150,8 +160,8 @@ void test_hardware_ble_advertising_visibility(void)
     record_ble_test_result("BLE Advertiser Init", true, NULL, 0);
     LOG_INF("✓ BLE advertiser initialized");
     
-    /* Test 3: Start advertising */
-    ret = ble_advertiser_start();
+    /* Test 3: Start advertising with dummy data */
+    ret = ble_advertiser_start(&dummy_data);
     if (ret != 0) {
         record_ble_test_result("BLE Start Advertising", false, "Start advertising failed", ret);
         LOG_ERR("Failed to start BLE advertising: %d", ret);
@@ -170,7 +180,7 @@ void test_hardware_ble_advertising_visibility(void)
         LOG_INF("✓ BLE advertising was active (successfully stopped)");
         
         /* Restart for further tests */
-        ret = ble_advertiser_start();
+        ret = ble_advertiser_start(&dummy_data);
         if (ret == 0) {
             LOG_INF("✓ BLE advertising restarted");
         }
@@ -248,7 +258,7 @@ void test_hardware_ble_characteristic_read_write(void)
     LOG_INF("=== Testing BLE Characteristic Access ===");
     
     /* Initialize sensor manager for data */
-    int ret = sensor_manager_init(false);
+    int ret = sensor_manager_init();
     if (ret != 0) {
         record_ble_test_result("Sensor Manager Init", false, "Sensor init failed", ret);
         LOG_ERR("Sensor manager initialization failed: %d", ret);
