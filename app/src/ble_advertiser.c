@@ -21,9 +21,6 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/sys/printk.h>
 #include "ble_advertiser.h"
-#include "ble_battery_service.h"
-#include "sensor_manager.h"
-#include "uptime_service.h"
 #include "device_naming.h"
 
 LOG_MODULE_REGISTER(ble_advertiser, CONFIG_LOG_DEFAULT_LEVEL);
@@ -109,46 +106,6 @@ static void ble_connected(struct bt_conn *conn, uint8_t err)
       advertising_enabled = false;
       LOG_INF("Advertising stopped on connect");
     }
-  }
-
-  /* Request connection parameters optimized for connect-read-disconnect pattern */
-  if (err == 0) {
-    struct bt_le_conn_param param = {
-      .interval_min = BT_GAP_INIT_CONN_INT_MIN,    /* 30ms - fast data exchange */
-      .interval_max = BT_GAP_INIT_CONN_INT_MAX,    /* 50ms - quick read completion */
-      .latency = 0,                                /* No latency for fast reads */
-      .timeout = 200,                              /* 2 seconds - shorter for quick sessions */
-    };
-
-    int ret = bt_conn_le_param_update(conn, &param);
-    if (ret) {
-      LOG_WRN("Failed to request connection parameter update: %d", ret);
-    } else {
-      LOG_DBG("Requested optimized connection parameters for quick read sessions");
-    }
-  }
-
-  /* Update sensor data to provide fresh readings to the connected client */
-  int ret = sensor_manager_update();
-  if (ret) {
-    LOG_WRN("Failed to update sensor data on connect: %d", ret);
-  } else {
-    LOG_DBG("Sensor data refreshed for connected client");
-  }
-
-  ret = ble_battery_service_update();
-  if (ret) {
-    LOG_WRN("Failed to update battery data on connect: %d", ret);
-  } else {
-    LOG_DBG("Battery data refreshed for connected client");
-  }
-
-  /* Update uptime data for the connected client */
-  ret = uptime_service_update();
-  if (ret) {
-    LOG_WRN("Failed to update uptime data on connect: %d", ret);
-  } else {
-    LOG_DBG("Uptime data refreshed for connected client");
   }
 }
 
