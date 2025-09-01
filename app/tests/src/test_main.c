@@ -5,9 +5,6 @@
  */
 
 #include <zephyr/ztest.h>
-#include <zephyr/logging/log.h>
-
-LOG_MODULE_REGISTER(test_main, CONFIG_LOG_DEFAULT_LEVEL);
 
 /**
  * @brief Main test entry point
@@ -15,14 +12,14 @@ LOG_MODULE_REGISTER(test_main, CONFIG_LOG_DEFAULT_LEVEL);
  * This file serves as the main entry point for all ZTEST-based unit tests
  * for the Nordic Thingy:52 Environmental Monitor project.
  * 
- * The ZTEST framework will automatically discover and run all test suites
- * defined in the linked test source files.
+ * This is a simplified test framework that validates the basic ZTEST
+ * functionality without complex hardware mocking.
  */
 
 static void *test_setup(void)
 {
-    LOG_INF("Starting Nordic Thingy:52 Environmental Monitor Test Suite");
-    LOG_INF("ZTEST Framework Version: %s", CONFIG_KERNEL_VERSION);
+    printk("Starting Nordic Thingy:52 Environmental Monitor Test Suite\n");
+    printk("ZTEST Framework initialized successfully\n");
     
     /* Global test setup - initialize any shared resources */
     return NULL;
@@ -30,7 +27,7 @@ static void *test_setup(void)
 
 static void test_teardown(void *fixture)
 {
-    LOG_INF("Test suite complete");
+    printk("Test suite completed successfully\n");
     /* Global test cleanup */
 }
 
@@ -45,7 +42,7 @@ ZTEST_SUITE(framework_validation, NULL, test_setup, NULL, NULL, test_teardown);
  */
 ZTEST(framework_validation, test_framework_basic)
 {
-    LOG_INF("Running basic framework validation");
+    printk("Running basic framework validation\n");
     
     /* Basic assertion tests */
     zassert_true(true, "Basic true assertion failed");
@@ -58,7 +55,7 @@ ZTEST(framework_validation, test_framework_basic)
     const char *test_str = "test";
     zassert_str_equal(test_str, "test", "String equality assertion failed");
     
-    LOG_INF("Framework validation tests passed");
+    printk("Framework validation tests passed\n");
 }
 
 /**
@@ -69,7 +66,7 @@ ZTEST(framework_validation, test_framework_basic)
  */
 ZTEST(framework_validation, test_floating_point_support)
 {
-    LOG_INF("Testing floating point support");
+    printk("Testing floating point support\n");
     
     float temp = 25.5f;
     float humidity = 60.2f;
@@ -84,7 +81,7 @@ ZTEST(framework_validation, test_floating_point_support)
     float sum = temp + humidity;
     zassert_within(sum, 85.7f, 0.01f, "Float addition failed");
     
-    LOG_INF("Floating point support validated");
+    printk("Floating point support validated\n");
 }
 
 /**
@@ -94,15 +91,15 @@ ZTEST(framework_validation, test_floating_point_support)
  */
 ZTEST(framework_validation, test_memory_allocation)
 {
-    LOG_INF("Testing memory allocation");
+    printk("Testing memory allocation\n");
     
     /* Test k_malloc if available */
     void *test_ptr = k_malloc(100);
     if (test_ptr != NULL) {
-        LOG_INF("Memory allocation successful");
+        printk("Memory allocation successful\n");
         k_free(test_ptr);
     } else {
-        LOG_WRN("Dynamic memory allocation not available");
+        printk("Dynamic memory allocation not available\n");
     }
     
     /* Test stack allocation */
@@ -118,5 +115,56 @@ ZTEST(framework_validation, test_memory_allocation)
     }
     
     zassert_true(all_set, "Stack buffer initialization failed");
-    LOG_INF("Memory allocation tests passed");
+    printk("Memory allocation tests passed\n");
+}
+
+/**
+ * @brief Test suite for build system validation
+ * 
+ * Validates that the build system is properly configured and
+ * all necessary dependencies are available.
+ */
+ZTEST_SUITE(build_system_validation, NULL, NULL, NULL, NULL, NULL);
+
+/**
+ * @brief Test build configuration
+ * 
+ * Ensures that important build-time configurations are set correctly.
+ */
+ZTEST(build_system_validation, test_build_configuration)
+{
+    printk("Testing build configuration\n");
+    
+    /* Verify ZTEST is enabled */
+    zassert_true(IS_ENABLED(CONFIG_ZTEST), "CONFIG_ZTEST should be enabled");
+    
+    /* Verify floating point support */
+    zassert_true(IS_ENABLED(CONFIG_FPU), "CONFIG_FPU should be enabled");
+    
+    /* Verify debug features */
+    zassert_true(IS_ENABLED(CONFIG_DEBUG), "CONFIG_DEBUG should be enabled");
+    
+    printk("Build configuration validated\n");
+}
+
+/**
+ * @brief Test system functionality
+ * 
+ * Basic system functionality tests to ensure the test environment
+ * can support more complex testing in the future.
+ */
+ZTEST(build_system_validation, test_system_functionality)
+{
+    printk("Testing system functionality\n");
+    
+    /* Test timer functionality */
+    int64_t start_time = k_uptime_get();
+    k_msleep(10);
+    int64_t end_time = k_uptime_get();
+    
+    int64_t elapsed = end_time - start_time;
+    zassert_true(elapsed >= 10, "Timer should have elapsed at least 10ms");
+    zassert_true(elapsed < 100, "Timer should not have elapsed more than 100ms");
+    
+    printk("System functionality validated\n");
 }

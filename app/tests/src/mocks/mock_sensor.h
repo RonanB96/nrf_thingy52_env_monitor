@@ -76,6 +76,25 @@ void mock_sensor_set_reading(const struct device *dev, enum sensor_channel chann
 void mock_sensor_set_fetch_result(const struct device *dev, bool success);
 
 /**
+ * @brief Mock sensor sample fetch function
+ * 
+ * @param dev Device pointer
+ * @return 0 on success, error code on failure
+ */
+int sensor_sample_fetch_mock(const struct device *dev);
+
+/**
+ * @brief Mock sensor channel get function
+ * 
+ * @param dev Device pointer
+ * @param chan Sensor channel
+ * @param val Sensor value pointer
+ * @return 0 on success, error code on failure
+ */
+int sensor_channel_get_mock(const struct device *dev, enum sensor_channel chan,
+                           struct sensor_value *val);
+
+/**
  * @brief Get number of times sensor_sample_fetch was called
  * 
  * @param dev Device pointer
@@ -99,74 +118,9 @@ int mock_sensor_get_get_call_count(const struct device *dev);
  */
 void mock_sensor_set_power_state(const struct device *dev, bool powered);
 
-/* Mock sensor driver functions (when SENSOR driver is disabled) */
-#ifndef CONFIG_SENSOR
-
-static inline int sensor_sample_fetch(const struct device *dev)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int sensor_sample_fetch_chan(const struct device *dev,
-                                          enum sensor_channel type)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int sensor_channel_get(const struct device *dev,
-                                    enum sensor_channel chan,
-                                    struct sensor_value *val)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int sensor_attr_set(const struct device *dev,
-                                 enum sensor_channel chan,
-                                 enum sensor_attribute attr,
-                                 const struct sensor_value *val)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int sensor_attr_get(const struct device *dev,
-                                 enum sensor_channel chan,
-                                 enum sensor_attribute attr,
-                                 struct sensor_value *val)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-/* Sensor value utility functions */
-static inline float sensor_value_to_float(const struct sensor_value *val)
-{
-    return (float)val->val1 + (float)val->val2 / 1000000.0f;
-}
-
-static inline double sensor_value_to_double(const struct sensor_value *val)
-{
-    return (double)val->val1 + (double)val->val2 / 1000000.0;
-}
-
-static inline int sensor_value_from_float(struct sensor_value *val, float fval)
-{
-    val->val1 = (int32_t)fval;
-    val->val2 = (int32_t)((fval - (float)val->val1) * 1000000.0f);
-    return 0;
-}
-
-static inline int sensor_value_from_double(struct sensor_value *val, double dval)
-{
-    val->val1 = (int32_t)dval;
-    val->val2 = (int32_t)((dval - (double)val->val1) * 1000000.0);
-    return 0;
-}
-
-#endif /* !CONFIG_SENSOR */
+/* Note: With CONFIG_SENSOR enabled, we use the real Zephyr sensor API 
+ * but provide mock implementations. The inline utility functions are 
+ * already defined in zephyr/drivers/sensor.h. */
 
 #ifdef __cplusplus
 }

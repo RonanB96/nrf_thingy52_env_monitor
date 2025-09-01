@@ -6,6 +6,6 @@ file = west.yml
 base = modules/zephyr
 
 [build]
-cmake-args = -DZEPHYR_TOOLCHAIN_VARIANT=zephyr -DZEPHYR_SDK_INSTALL_DIR=/home/ronan/ncs/toolchains/c5be9c56c7/opt/zephyr-sdk
+cmake-args = 
 board = thingy52/nrf52832
 

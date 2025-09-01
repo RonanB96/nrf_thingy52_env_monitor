@@ -83,57 +83,46 @@ int mock_gpio_get_pin_value(const struct device *dev, gpio_pin_t pin);
 void mock_gpio_verify_pin_config(const struct device *dev, gpio_pin_t pin, 
                                  gpio_flags_t expected_flags);
 
-/* Mock GPIO driver functions (when GPIO driver is disabled) */
-#ifndef CONFIG_GPIO
+/**
+ * @brief Mock GPIO pin configure function
+ * 
+ * @param dev Device pointer
+ * @param pin Pin number
+ * @param flags Configuration flags
+ * @return 0 on success, error code on failure
+ */
+int gpio_pin_configure_mock(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags);
 
-static inline int gpio_pin_configure(const struct device *dev, gpio_pin_t pin,
-                                    gpio_flags_t flags)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
+/**
+ * @brief Mock GPIO pin set function
+ * 
+ * @param dev Device pointer
+ * @param pin Pin number
+ * @param value Pin value to set
+ * @return 0 on success, error code on failure
+ */
+int gpio_pin_set_mock(const struct device *dev, gpio_pin_t pin, int value);
 
-static inline int gpio_pin_get(const struct device *dev, gpio_pin_t pin)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
+/**
+ * @brief Mock GPIO pin get function
+ * 
+ * @param dev Device pointer
+ * @param pin Pin number
+ * @return Pin value or error code
+ */
+int gpio_pin_get_mock(const struct device *dev, gpio_pin_t pin);
 
-static inline int gpio_pin_set(const struct device *dev, gpio_pin_t pin, int value)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
+/**
+ * @brief Mock GPIO pin toggle function
+ * 
+ * @param dev Device pointer
+ * @param pin Pin number
+ * @return 0 on success, error code on failure
+ */
+int gpio_pin_toggle_mock(const struct device *dev, gpio_pin_t pin);
 
-static inline int gpio_pin_toggle(const struct device *dev, gpio_pin_t pin)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int gpio_pin_interrupt_configure(const struct device *dev, gpio_pin_t pin,
-                                              enum gpio_int_mode mode,
-                                              enum gpio_int_trig trig)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int gpio_add_callback(const struct device *dev,
-                                   struct gpio_callback *callback)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-static inline int gpio_remove_callback(const struct device *dev,
-                                      struct gpio_callback *callback)
-{
-    /* Mock implementation will be called */
-    return 0;
-}
-
-#endif /* !CONFIG_GPIO */
+/* Note: With CONFIG_GPIO enabled, we use the real Zephyr GPIO API
+ * but provide mock implementations via function interception in the .c files */
 
 #ifdef __cplusplus
 }

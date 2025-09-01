@@ -69,69 +69,35 @@ void mock_i2c_set_device_ready(const struct device *dev, bool ready);
  */
 void mock_i2c_verify_complete(void);
 
-/* Mock I2C driver functions (override Zephyr driver) */
-#ifndef CONFIG_I2C
-/* Only define these when I2C driver is disabled for testing */
+/**
+ * @brief Mock I2C write function
+ * 
+ * @param dev Device pointer
+ * @param buf Data to write
+ * @param num_bytes Number of bytes to write
+ * @param addr Device address
+ * @return 0 on success, error code on failure
+ */
+int i2c_write_mock(const struct device *dev, const uint8_t *buf,
+                   uint32_t num_bytes, uint16_t addr);
 
-static inline bool device_is_ready(const struct device *dev)
-{
-    /* Mock implementation - always return true unless specifically set */
-    return true;
-}
+/**
+ * @brief Mock I2C write-read function
+ * 
+ * @param dev Device pointer
+ * @param addr Device address
+ * @param write_buf Data to write
+ * @param num_write Number of bytes to write
+ * @param read_buf Buffer for read data
+ * @param num_read Number of bytes to read
+ * @return 0 on success, error code on failure
+ */
+int i2c_write_read_mock(const struct device *dev, uint16_t addr,
+                        const void *write_buf, size_t num_write,
+                        void *read_buf, size_t num_read);
 
-static inline int i2c_write(const struct device *dev, const uint8_t *buf,
-                           uint32_t num_bytes, uint16_t addr)
-{
-    struct mock_i2c_transaction transaction = {
-        .type = MOCK_I2C_WRITE,
-        .addr = addr,
-        .write_buf = buf,
-        .write_len = num_bytes,
-        .read_buf = NULL,
-        .read_len = 0,
-        .expected_return = 0
-    };
-    
-    /* Process mock transaction */
-    return 0; /* Default success */
-}
-
-static inline int i2c_read(const struct device *dev, uint8_t *buf,
-                          uint32_t num_bytes, uint16_t addr)
-{
-    struct mock_i2c_transaction transaction = {
-        .type = MOCK_I2C_READ,
-        .addr = addr,
-        .write_buf = NULL,
-        .write_len = 0,
-        .read_buf = buf,
-        .read_len = num_bytes,
-        .expected_return = 0
-    };
-    
-    /* Process mock transaction */
-    return 0; /* Default success */
-}
-
-static inline int i2c_write_read(const struct device *dev, uint16_t addr,
-                                const void *write_buf, size_t num_write,
-                                void *read_buf, size_t num_read)
-{
-    struct mock_i2c_transaction transaction = {
-        .type = MOCK_I2C_WRITE_READ,
-        .addr = addr,
-        .write_buf = (const uint8_t *)write_buf,
-        .write_len = num_write,
-        .read_buf = (uint8_t *)read_buf,
-        .read_len = num_read,
-        .expected_return = 0
-    };
-    
-    /* Process mock transaction */
-    return 0; /* Default success */
-}
-
-#endif /* !CONFIG_I2C */
+/* Note: With CONFIG_I2C and CONFIG_GPIO enabled, we use the real Zephyr APIs
+ * but provide mock implementations via function interception in the .c files */
 
 #ifdef __cplusplus
 }
