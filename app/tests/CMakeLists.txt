@@ -14,6 +14,7 @@ project(nrf_thingy_env_monitor_tests)
 # Test source files
 target_sources(app PRIVATE
     src/test_main.c
+    src/test_mock_framework.c
     src/test_sensor_manager.c
     src/test_ess_service.c
     src/test_battery_service.c

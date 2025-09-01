@@ -1,0 +1,87 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        path: nrf_thingy52_env_monitor
+        
+    - name: Cache Zephyr SDK
+      uses: actions/cache@v3
+      with:
+        path: /opt/zephyr-sdk
+        key: zephyr-sdk-0.16.1
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build gperf ccache dfu-util \
+          device-tree-compiler wget python3-dev python3-venv python3-tk \
+          xz-utils file make gcc gcc-multilib g++-multilib
+        
+    - name: Install Zephyr SDK
+      run: |
+        if [ ! -d "/opt/zephyr-sdk" ]; then
+          cd /tmp
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.1/zephyr-sdk-0.16.1_linux-x86_64_minimal.tar.xz
+          tar -xf zephyr-sdk-0.16.1_linux-x86_64_minimal.tar.xz
+          sudo mv zephyr-sdk-0.16.1 /opt/zephyr-sdk
+          cd /opt/zephyr-sdk && sudo ./setup.sh -h
+        fi
+        
+    - name: Set up Python environment
+      run: |
+        cd nrf_thingy52_env_monitor
+        python3 -m venv .venv
+        source .venv/bin/activate
+        pip install west
+        pip install intelhex pyelftools pykwalify ruamel.yaml python-dateutil
+        
+    - name: Initialize west workspace
+      run: |
+        cd nrf_thingy52_env_monitor
+        source .venv/bin/activate
+        west update
+        
+    - name: Build tests
+      run: |
+        cd nrf_thingy52_env_monitor
+        source .venv/bin/activate
+        export ZEPHYR_SDK_INSTALL_DIR=/opt/zephyr-sdk
+        export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+        west build app/tests -b native_sim -p always
+        
+    - name: Run tests
+      run: |
+        cd nrf_thingy52_env_monitor
+        source .venv/bin/activate
+        west build -t run
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: nrf_thingy52_env_monitor/build/zephyr/zephyr.elf
+        
+    - name: Check test output
+      run: |
+        cd nrf_thingy52_env_monitor
+        # Parse test output for pass/fail status
+        # This would need to be customized based on actual test output format
+        if grep -q "PROJECT EXECUTION SUCCESSFUL" build/zephyr/zephyr.log; then
+          echo "Tests passed!"
+        else
+          echo "Tests failed!"
+          exit 1
+        fi
