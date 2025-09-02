@@ -5,6 +5,8 @@ manifest:
   remotes:
     - name: ncs
       url-base: https://github.com/nrfconnect
+    - name: ronan
+      url-base: https://github.com/RonanB96/
 
   projects:
     - name: sdk-nrf
@@ -15,12 +17,12 @@ manifest:
         # Import the NCS manifest with module path prefix
         file: west.yml
         path-prefix: modules
-
-    # # Override Zephyr with your specific commit/branch
-    # - name: zephyr
-    #   remote: ncs
-    #   path: modules/zephyr
-    #   revision: 825150eccf5
+    # Override Zephyr with your specific commit/branch
+    - name: zephyr
+      remote: ronan
+      path: modules/zephyr
+      revision: 825150eccf5b33fd6f120cec9bdbad8dc5bde402
+      west-commands: scripts/west-commands.yml
 
   self:
     path: app
