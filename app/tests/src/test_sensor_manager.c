@@ -261,11 +261,17 @@ ZTEST(sensor_manager, test_sensor_error_handling)
     ret = i2c_read_mock(&mock_i2c_device, dummy_buffer, 1, 0x5F);
     zassert_equal(ret, -ENODEV, "Should return ENODEV when I2C device not ready");
     
+    /* Reset I2C device to ready state for cleanup */
+    mock_i2c_set_device_ready(&mock_i2c_device, true);
+    
     /* Test 4: GPIO failure (SX1509B not ready) */
     mock_gpio_set_device_ready(&mock_sx1509b_device, false);
     
     ret = gpio_pin_set_mock(&mock_sx1509b_device, 10, 1);
     zassert_equal(ret, -ENODEV, "Should return ENODEV when GPIO device not ready");
+    
+    /* Reset GPIO device to ready state for cleanup */
+    mock_gpio_set_device_ready(&mock_sx1509b_device, true);
     
     LOG_INF("Sensor error handling test passed");
 }

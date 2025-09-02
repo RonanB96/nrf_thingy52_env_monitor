@@ -9,6 +9,8 @@
 
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/i2c.h>
+#include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,6 +82,18 @@ void mock_i2c_verify_complete(void);
  */
 int i2c_write_mock(const struct device *dev, const uint8_t *buf,
                    uint32_t num_bytes, uint16_t addr);
+
+/**
+ * @brief Mock I2C read function
+ * 
+ * @param dev Device pointer
+ * @param buf Buffer for read data
+ * @param num_bytes Number of bytes to read
+ * @param addr Device address
+ * @return 0 on success, error code on failure
+ */
+int i2c_read_mock(const struct device *dev, uint8_t *buf,
+                  uint32_t num_bytes, uint16_t addr);
 
 /**
  * @brief Mock I2C write-read function

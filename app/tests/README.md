@@ -33,18 +33,21 @@ app/tests/
 The test framework includes comprehensive mocks for hardware dependencies:
 
 #### I2C Mock (`mock_i2c.{h,c}`)
+
 - Simulates I2C transactions without hardware
 - Supports write, read, and write-read operations
 - Transaction validation and error injection
 - Used for sensor communication testing
 
 #### GPIO Mock (`mock_gpio.{h,c}`)
+
 - Simulates GPIO pin operations
 - Pin configuration, set/get operations
 - Interrupt configuration support
 - Critical for SX1509B GPIO expander testing
 
 #### Sensor Mock (`mock_sensor.{h,c}`)
+
 - Implements Zephyr sensor API without hardware
 - Configurable sensor readings and error conditions
 - Sample fetch and channel get simulation
@@ -60,13 +63,14 @@ The test framework includes comprehensive mocks for hardware dependencies:
    - Python virtual environment with west and dependencies
 
 2. **Build Configuration:**
+
    ```bash
    # Navigate to project root
    cd nrf_thingy52_env_monitor
-   
+
    # Build tests for native simulation
    west build app/tests -b native_sim
-   
+
    # Run tests
    west build -t run
    ```
@@ -118,7 +122,7 @@ ZTEST(sensor_tests, test_sensor_i2c_communication)
     uint8_t write_data[] = {0x0F};  /* WHO_AM_I register */
     uint8_t expected_response[] = {0xBC};  /* HTS221 ID */
     uint8_t read_buffer[1];
-    
+
     struct mock_i2c_transaction expected = {
         .type = MOCK_I2C_WRITE_READ,
         .addr = 0x5F,  /* HTS221 I2C address */
@@ -128,18 +132,18 @@ ZTEST(sensor_tests, test_sensor_i2c_communication)
         .read_len = 1,
         .expected_return = 0
     };
-    
+
     mock_i2c_expect_transaction(&expected);
-    
+
     /* Execute the I2C operation */
     struct device mock_i2c_dev = {0};
     int ret = i2c_write_read_mock(&mock_i2c_dev, 0x5F, write_data, 1,
                                  read_buffer, 1);
-    
+
     /* Verify results */
     zassert_ok(ret, "I2C operation should succeed");
     zassert_equal(read_buffer[0], 0xBC, "Should receive HTS221 ID");
-    
+
     mock_i2c_verify_complete();
 }
 ```
@@ -150,21 +154,21 @@ ZTEST(sensor_tests, test_sensor_i2c_communication)
 ZTEST(sensor_tests, test_temperature_reading)
 {
     struct device mock_sensor_dev = {0};
-    
+
     /* Configure expected sensor reading */
     struct sensor_value temp_reading;
     sensor_value_from_float(&temp_reading, 25.5f);
-    
+
     mock_sensor_set_reading(&mock_sensor_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp_reading);
-    
+
     /* Test sensor operations */
     int ret = sensor_sample_fetch_mock(&mock_sensor_dev);
     zassert_ok(ret, "Sample fetch should succeed");
-    
+
     struct sensor_value retrieved_value;
     ret = sensor_channel_get_mock(&mock_sensor_dev, SENSOR_CHAN_AMBIENT_TEMP, &retrieved_value);
     zassert_ok(ret, "Channel get should succeed");
-    
+
     float retrieved_temp = sensor_value_to_float(&retrieved_value);
     zassert_within(retrieved_temp, 25.5f, 0.01f, "Temperature should match");
 }
@@ -176,19 +180,19 @@ ZTEST(sensor_tests, test_temperature_reading)
 ZTEST(gpio_tests, test_sx1509b_pin_control)
 {
     struct device mock_gpio_dev = {0};
-    
+
     /* Test pin configuration */
     int ret = gpio_pin_configure_mock(&mock_gpio_dev, 10, GPIO_OUTPUT_ACTIVE);
     zassert_ok(ret, "Pin configuration should succeed");
-    
+
     /* Test pin set */
     ret = gpio_pin_set_mock(&mock_gpio_dev, 10, 1);
     zassert_ok(ret, "Pin set should succeed");
-    
+
     /* Verify pin state */
     int value = mock_gpio_get_pin_value(&mock_gpio_dev, 10);
     zassert_equal(value, 1, "Pin should be high");
-    
+
     /* Verify configuration */
     mock_gpio_verify_pin_config(&mock_gpio_dev, 10, GPIO_OUTPUT_ACTIVE);
 }
@@ -266,9 +270,9 @@ ZTEST(test_suite, test_case)
 {
     LOG_INF("Starting test case");
     LOG_DBG("Debug information");
-    
+
     /* Test code with assertions */
-    
+
     LOG_INF("Test case completed");
 }
 ```

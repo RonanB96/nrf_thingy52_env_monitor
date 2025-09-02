@@ -138,6 +138,13 @@ int i2c_write_mock(const struct device *dev, const uint8_t *buf,
 {
     LOG_DBG("Mock I2C write: dev=%p, addr=0x%04x, len=%d", dev, addr, num_bytes);
     
+    /* Check device readiness first */
+    int device_index = ((uintptr_t)dev) % ARRAY_SIZE(mock_i2c_state.device_ready_states);
+    if (!mock_i2c_state.device_ready_states[device_index]) {
+        LOG_WRN("I2C device not ready");
+        return -ENODEV;
+    }
+    
     struct mock_i2c_transaction transaction = {
         .type = MOCK_I2C_WRITE,
         .addr = addr,
@@ -155,6 +162,13 @@ int i2c_read_mock(const struct device *dev, uint8_t *buf,
                   uint32_t num_bytes, uint16_t addr)
 {
     LOG_DBG("Mock I2C read: dev=%p, addr=0x%04x, len=%d", dev, addr, num_bytes);
+    
+    /* Check device readiness first */
+    int device_index = ((uintptr_t)dev) % ARRAY_SIZE(mock_i2c_state.device_ready_states);
+    if (!mock_i2c_state.device_ready_states[device_index]) {
+        LOG_WRN("I2C device not ready");
+        return -ENODEV;
+    }
     
     struct mock_i2c_transaction transaction = {
         .type = MOCK_I2C_READ,
@@ -175,6 +189,13 @@ int i2c_write_read_mock(const struct device *dev, uint16_t addr,
 {
     LOG_DBG("Mock I2C write_read: dev=%p, addr=0x%04x, write_len=%zu, read_len=%zu",
             dev, addr, num_write, num_read);
+    
+    /* Check device readiness first */
+    int device_index = ((uintptr_t)dev) % ARRAY_SIZE(mock_i2c_state.device_ready_states);
+    if (!mock_i2c_state.device_ready_states[device_index]) {
+        LOG_WRN("I2C device not ready");
+        return -ENODEV;
+    }
     
     struct mock_i2c_transaction transaction = {
         .type = MOCK_I2C_WRITE_READ,

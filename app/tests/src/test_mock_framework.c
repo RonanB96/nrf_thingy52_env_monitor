@@ -180,10 +180,16 @@ ZTEST(mock_framework, test_mock_error_conditions)
     int ret = i2c_write_mock(&mock_i2c_dev, dummy_data, sizeof(dummy_data), 0x3E);
     zassert_equal(ret, -ENODEV, "I2C should return ENODEV when device not ready");
     
+    /* Reset I2C device to ready for further tests */
+    mock_i2c_set_device_ready(&mock_i2c_dev, true);
+    
     /* Test GPIO device not ready */
     mock_gpio_set_device_ready(&mock_gpio_dev, false);
     ret = gpio_pin_configure_mock(&mock_gpio_dev, 0, GPIO_OUTPUT);
     zassert_equal(ret, -ENODEV, "GPIO should return ENODEV when device not ready");
+    
+    /* Reset GPIO device to ready for further tests */
+    mock_gpio_set_device_ready(&mock_gpio_dev, true);
     
     /* Test sensor device not ready */
     mock_sensor_set_device_ready(&mock_sensor_dev, false);

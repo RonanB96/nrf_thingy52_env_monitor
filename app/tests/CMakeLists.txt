@@ -5,25 +5,25 @@
 #
 cmake_minimum_required(VERSION 3.20.0)
 
-# Set C standard to match main application
-set_property(GLOBAL PROPERTY CSTD c11)
-
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(nrf_thingy_env_monitor_tests)
 
-# Simple test source files - no complex mocking for now
+# Test source files with mocking framework
 target_sources(app PRIVATE
     src/test_main.c
+    src/test_battery_service.c
+    src/test_ess_service.c
+    src/test_mock_framework.c
+    src/test_sensor_manager.c
+    src/mocks/mock_i2c.c
+    src/mocks/mock_gpio.c
+    src/mocks/mock_sensor.c
+    src/mocks/mock_bluetooth.c
 )
 
 # Include directories for tests
 target_include_directories(app PRIVATE 
     src
+    src/mocks
     ../include
-)
-
-# Compile definitions for testing
-target_compile_definitions(app PRIVATE
-    -DCONFIG_ZTEST=1
-    -DZTEST_UNITTEST=1
 )
