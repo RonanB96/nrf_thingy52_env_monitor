@@ -6,23 +6,48 @@ manifest:
     - name: ncs
       url-base: https://github.com/nrfconnect
     - name: ronan
-      url-base: https://github.com/RonanB96/
+      url-base: https://github.com/RonanB96
+    - name: zephyrproject
+      url-base: https://github.com/zephyrproject-rtos
 
   projects:
+    # Custom Zephyr with CCS811 fixes and hal_nordic support
+    - name: zephyr
+      remote: ronan
+      repo-path: sdk-zephyr
+      path: modules/zephyr
+      revision: ccs811_updates
+      west-commands: scripts/west-commands.yml
+      import:
+        # Import only essential modules for Nordic nRF52832 BLE development
+        file: west.yml
+        name-allowlist:
+          # Essential Nordic HAL for nRF52832
+          - hal_nordic
+          # Essential ST HAL for HTS221, LPS22HB sensors
+          - hal_st
+          # Essential modules for sensors and basic functionality
+          - cmsis
+          - fatfs
+          - tinycrypt
+          # Optional but useful for debugging
+          - segger
+
+    # Minimal NCS for samples defaults and DK library
     - name: sdk-nrf
       remote: ncs
       path: nrf
       revision: v3.0.2
       import:
-        # Import the NCS manifest with module path prefix
+        # Import minimal NCS components
         file: west.yml
         path-prefix: modules
-    # Override Zephyr with your specific commit/branch
-    - name: zephyr
-      remote: ronan
-      path: modules/zephyr
-      revision: 825150eccf5b33fd6f120cec9bdbad8dc5bde402
-      west-commands: scripts/west-commands.yml
+        # Only include essential Nordic libraries
+        name-allowlist:
+          # Skip matter entirely for size optimization
+          # Include essential Nordic libraries for nRF52832 BLE
+          - mcuboot
+          - nrfxlib
 
   self:
     path: app

@@ -1,0 +1,68 @@
+common:
+  tags:
+    - tests
+    - unit
+    - bluetooth
+    - sensor
+    - environmental
+
+tests:
+  # Basic test suite - runs on native simulation
+  thingy52.env_monitor.tests.basic:
+    type: unit
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    tags:
+      - sensor_manager
+      - battery_service
+      - ess_service
+
+  # Sensor manager tests
+  thingy52.env_monitor.tests.sensor_manager:
+    type: unit
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    extra_configs:
+      - CONFIG_ZTEST_VERBOSE_OUTPUT=y
+    tags:
+      - sensor_manager
+      - i2c_mock
+      - gpio_mock
+
+  # BLE service tests
+  thingy52.env_monitor.tests.ble_services:
+    type: unit
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    extra_configs:
+      - CONFIG_ZTEST_VERBOSE_OUTPUT=y
+    tags:
+      - ble_services
+      - ess_service
+      - battery_service
+
+  # Mock validation tests
+  thingy52.env_monitor.tests.mocks:
+    type: unit
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    extra_configs:
+      - CONFIG_ZTEST_VERBOSE_OUTPUT=y
+      - CONFIG_ZTEST_MOCKING=y
+    tags:
+      - mocks
+      - i2c_mock
+      - gpio_mock
+      - bluetooth_mock
