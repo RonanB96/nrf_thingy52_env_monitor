@@ -6,3 +6,6 @@ file = west.yml
 base = modules/zephyr
 sdk-install-dir = /home/ronan/ncs/toolchains/c5be9c56c7/opt/zephyr-sdk
 
+[build]
+cmake-args = 
+

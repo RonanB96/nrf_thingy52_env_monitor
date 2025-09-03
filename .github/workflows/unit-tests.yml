@@ -24,7 +24,7 @@ jobs:
           xz-utils file make gcc gcc-multilib g++-multilib libc6-dev-i386
         
     - name: Cache Python dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
@@ -60,21 +60,24 @@ jobs:
         cd nrf_thingy52_env_monitor
         source .venv/bin/activate
         export ZEPHYR_TOOLCHAIN_VARIANT=host
-        west build -t run
+        # Run the test executable directly
+        ./build/tests/zephyr/zephyr.exe > test_output.log 2>&1 || echo "Test execution completed"
+        cat test_output.log
         
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results
-        path: nrf_thingy52_env_monitor/build/zephyr/zephyr.elf
+        path: |
+          nrf_thingy52_env_monitor/build/tests/zephyr/zephyr.elf
+          nrf_thingy52_env_monitor/test_output.log
         
     - name: Check test output
       run: |
         cd nrf_thingy52_env_monitor
         # Parse test output for pass/fail status
-        # This would need to be customized based on actual test output format
-        if grep -q "PROJECT EXECUTION SUCCESSFUL" build/zephyr/zephyr.log; then
+        if grep -q "PROJECT EXECUTION SUCCESSFUL" test_output.log; then
           echo "Tests passed!"
         else
           echo "Tests failed!"
