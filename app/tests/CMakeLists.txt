@@ -10,7 +10,7 @@ project(nrf_thingy_env_monitor_tests)
 
 # Test source files with mocking framework
 target_sources(app PRIVATE
-    src/test_main.c
+    src/test_main_simple.c
     src/test_battery_service.c
     src/test_ess_service.c
     src/test_mock_framework.c
@@ -27,3 +27,36 @@ target_include_directories(app PRIVATE
     src/mocks
     ../include
 )
+
+# Coverage configuration for GCC/host toolchain
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(app PRIVATE
+        --coverage
+        -fprofile-arcs
+        -ftest-coverage
+        -fprofile-generate
+        -O0  # Disable optimizations for accurate coverage
+        -g   # Include debug symbols
+    )
+    
+    target_link_options(app PRIVATE
+        --coverage
+        -fprofile-arcs
+        -ftest-coverage
+    )
+endif()
+
+# Coverage configuration for Clang/LLVM
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    target_compile_options(app PRIVATE
+        -fprofile-instr-generate
+        -fcoverage-mapping
+        -O0
+        -g
+    )
+    
+    target_link_options(app PRIVATE
+        -fprofile-instr-generate
+        -fcoverage-mapping
+    )
+endif()

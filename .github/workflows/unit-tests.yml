@@ -21,7 +21,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cmake ninja-build gperf ccache dfu-util \
           device-tree-compiler wget python3-dev python3-venv python3-tk \
-          xz-utils file make gcc gcc-multilib g++-multilib libc6-dev-i386
+          xz-utils file make gcc gcc-multilib g++-multilib libc6-dev-i386 \
+          lcov gcovr
         
     - name: Cache Python dependencies
       uses: actions/cache@v4
@@ -47,39 +48,95 @@ jobs:
         west config build.cmake-args "" || true
         west update
         
-    - name: Build tests
+    - name: Build tests with coverage
       run: |
         cd nrf_thingy52_env_monitor
         source .venv/bin/activate
         export ZEPHYR_TOOLCHAIN_VARIANT=host
-        echo "Using host toolchain for native_sim build"
-        west build app/tests -b native_sim -p always
+        echo "Building tests with coverage enabled"
+        west build app/tests -b native_sim -p always -- -DCONFIG_COVERAGE=y
         
     - name: Run tests
       run: |
         cd nrf_thingy52_env_monitor
         source .venv/bin/activate
         export ZEPHYR_TOOLCHAIN_VARIANT=host
+        echo "Running tests and collecting coverage data"
         # Run the test executable directly
         ./build/tests/zephyr/zephyr.exe > test_output.log 2>&1 || echo "Test execution completed"
         cat test_output.log
         
-    - name: Upload test results
+    - name: Generate coverage reports
+      run: |
+        cd nrf_thingy52_env_monitor
+        echo "Generating coverage reports..."
+        
+        # Create coverage directory
+        mkdir -p coverage
+        
+        # Generate HTML coverage report with lcov
+        lcov --capture --directory build/tests --output-file coverage/coverage.info \
+          --rc lcov_branch_coverage=1 || echo "LCOV collection completed"
+        
+        # Filter out system headers and test files, keep only app source
+        lcov --remove coverage/coverage.info '/usr/*' '/opt/*' '*/tests/*' '*/mocks/*' \
+          --output-file coverage/coverage_filtered.info \
+          --rc lcov_branch_coverage=1 || echo "LCOV filtering completed"
+        
+        # Generate HTML report
+        genhtml coverage/coverage_filtered.info --output-directory coverage/html \
+          --title "Nordic Thingy:52 Test Coverage" \
+          --show-details --legend \
+          --rc lcov_branch_coverage=1 || echo "HTML generation completed"
+        
+        # Generate JSON coverage report with gcovr for better CI integration
+        gcovr --root . --filter 'app/src/.*' \
+          --exclude 'app/tests/.*' \
+          --exclude 'app/src/main_mesh.c' \
+          --json coverage/coverage.json \
+          --html coverage/coverage.html \
+          --txt coverage/coverage.txt \
+          build/tests || echo "gcovr generation completed"
+        
+        # Display coverage summary
+        if [ -f coverage/coverage.txt ]; then
+          echo "Coverage Summary:"
+          cat coverage/coverage.txt
+        fi
+        
+    - name: Coverage Summary Comment
+      run: |
+        cd nrf_thingy52_env_monitor
+        echo "## 📊 Test Coverage Report" >> coverage_summary.md
+        echo "" >> coverage_summary.md
+        if [ -f coverage/coverage.txt ]; then
+          echo '```' >> coverage_summary.md
+          cat coverage/coverage.txt >> coverage_summary.md
+          echo '```' >> coverage_summary.md
+        else
+          echo "Coverage data not available" >> coverage_summary.md
+        fi
+        echo "" >> coverage_summary.md
+        echo "Full coverage report available in artifacts." >> coverage_summary.md
+        
+    - name: Upload test results and coverage
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-results
+        name: test-results-and-coverage
         path: |
           nrf_thingy52_env_monitor/build/tests/zephyr/zephyr.elf
           nrf_thingy52_env_monitor/test_output.log
+          nrf_thingy52_env_monitor/coverage/
+          nrf_thingy52_env_monitor/coverage_summary.md
         
     - name: Check test output
       run: |
         cd nrf_thingy52_env_monitor
         # Parse test output for pass/fail status
         if grep -q "PROJECT EXECUTION SUCCESSFUL" test_output.log; then
-          echo "Tests passed!"
+          echo "✅ All tests passed!"
         else
-          echo "Tests failed!"
+          echo "❌ Tests failed!"
           exit 1
         fi

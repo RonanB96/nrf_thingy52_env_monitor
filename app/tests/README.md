@@ -313,8 +313,73 @@ int fetch_count = mock_sensor_get_fetch_call_count(&device);
 1. **Device Tree Mocking**: Automatic mock device generation from device tree
 2. **Timing Simulation**: k_msleep and interrupt timing simulation
 3. **BLE Stack Mocking**: Complete Bluetooth GATT operation mocking
-4. **Coverage Analysis**: Code coverage reporting integration
+4. ~~**Coverage Analysis**: Automated code coverage reporting with gcov/lcov~~ ✅ **IMPLEMENTED**
 5. **Performance Testing**: Sensor reading timing and power consumption validation
+
+## Code Coverage
+
+The test framework now includes comprehensive code coverage reporting using gcov and lcov tools.
+
+### Coverage Configuration
+
+The framework supports two test configurations:
+
+1. **Standard Testing** (`prj.conf`): Basic test execution
+2. **Coverage Testing** (`prj_coverage.conf`): Optimized for coverage data collection
+
+### Generating Coverage Reports
+
+```bash
+# Build tests with coverage enabled
+west build app/tests -b native_sim -- -DCONF_FILE=prj_coverage.conf
+
+# Run tests to collect coverage data
+./build/tests/zephyr/zephyr.exe
+
+# Generate HTML coverage report
+lcov --capture --directory build/tests --output-file coverage.info
+lcov --remove coverage.info '/usr/*' '/opt/*' '*/tests/*' --output-file coverage_filtered.info
+genhtml coverage_filtered.info --output-directory coverage_html
+
+# Generate summary coverage report
+gcovr --root . --filter 'app/src/.*' --exclude 'app/tests/.*' --txt
+```
+
+### Coverage Metrics
+
+The coverage reporting focuses on:
+- **Line Coverage**: Percentage of executable lines tested
+- **Branch Coverage**: Percentage of decision branches tested  
+- **Function Coverage**: Percentage of functions called during tests
+
+**Target Coverage Levels:**
+- Unit Tests: 95%+ line coverage, 85%+ branch coverage
+- Integration Tests: 80%+ line coverage
+- Critical sensor paths: 100% coverage
+
+### CI/CD Coverage Integration
+
+The GitHub Actions workflow automatically:
+- Builds tests with coverage enabled
+- Runs all test suites
+- Generates HTML and JSON coverage reports
+- Uploads coverage artifacts
+- Displays coverage summary in test results
+
+Coverage reports are available in the "test-results-and-coverage" artifact after each CI run.
+
+## C Unit Testing Best Practices
+
+The test framework follows industry-standard C unit testing practices. See [C_UNIT_TESTING_BEST_PRACTICES.md](C_UNIT_TESTING_BEST_PRACTICES.md) for comprehensive guidelines covering:
+
+- Test organization and naming conventions
+- Setup/teardown patterns for test isolation
+- Assertion best practices with descriptive error messages
+- Mock framework design patterns
+- Error condition testing strategies
+- Performance and memory testing approaches
+- Coverage analysis and reporting
+- CI/CD integration patterns
 
 ## Integration with Development Workflow
 

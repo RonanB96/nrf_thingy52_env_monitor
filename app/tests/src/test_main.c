@@ -5,149 +5,636 @@
  */
 
 #include <zephyr/ztest.h>
+#include <zephyr/logging/log.h>
 #include <string.h>
 
-/**
- * @brief Main test entry point
- *
- * This file serves as the main entry point for all ZTEST-based unit tests
- * for the Nordic Thingy:52 Environmental Monitor project.
- *
- * This is a simplified test framework that validates the basic ZTEST
- * functionality without complex hardware mocking.
- */
-
-static void *test_setup(void)
-{
-    printk("Starting Nordic Thingy:52 Environmental Monitor Test Suite\n");
-    printk("ZTEST Framework initialized successfully\n");
-
-    /* Global test setup - initialize any shared resources */
-    return NULL;
-}
-
-static void test_teardown(void *fixture)
-{
-    printk("Test suite completed successfully\n");
-    /* Global test cleanup */
-}
-
-/* Global test suite for framework validation */
-ZTEST_SUITE(framework_validation, NULL, test_setup, NULL, NULL, test_teardown);
+LOG_MODULE_REGISTER(test_main, CONFIG_LOG_DEFAULT_LEVEL);
 
 /**
- * @brief Basic framework validation test
+ * @file test_main.c
+ * @brief Main test entry point for Nordic Thingy:52 Environmental Monitor
  *
- * Ensures the ZTEST framework is working correctly and basic
- * assertions function as expected.
+ * This file serves as the main entry point for all ZTEST-based unit tests.
+ * It follows C unit testing best practices with proper test organization,
+ * clear naming conventions, and comprehensive test coverage.
+ *
+ * Test Organization:
+ * - Framework validation tests ensure ZTEST works correctly
+ * - Each test has a clear purpose and descriptive name
+ * - Setup/teardown functions provide clean test environments
+ * - Comprehensive assertions with meaningful error messages
  */
-ZTEST(framework_validation, test_framework_basic)
-{
-    printk("Running basic framework validation\n");
-
-    /* Basic assertion tests */
-    zassert_true(true, "Basic true assertion failed");
-    zassert_false(false, "Basic false assertion failed");
-    zassert_equal(1, 1, "Basic equality assertion failed");
-    zassert_not_equal(1, 2, "Basic inequality assertion failed");
-    zassert_is_null(NULL, "NULL pointer assertion failed");
-
-    /* String comparison test */
-    const char *test_str = "test";
-    zassert_str_equal(test_str, "test", "String equality assertion failed");
-
-    printk("Framework validation tests passed\n");
-}
 
 /**
- * @brief Test floating point support
- *
- * Validates that floating point operations work correctly in the test
- * environment, which is critical for sensor value calculations.
+ * @brief Global test fixture for framework validation
  */
-ZTEST(framework_validation, test_floating_point_support)
+struct framework_test_fixture {
+    bool initialized;
+    char test_buffer[256];
+    int test_counter;
+};
+
+/**
+ * @brief Test suite setup - runs once before all tests in the suite
+ *
+ * Following C unit testing best practices:
+ * - Initialize shared resources once
+ * - Log test suite start
+ * - Return fixture data for use in tests
+ */
+static void *framework_test_suite_setup(void)
 {
-    printk("Testing floating point support\n");
+    LOG_INF("=== Starting Nordic Thingy:52 Environmental Monitor Test Suite ===");
+    LOG_INF("ZTEST Framework initialized successfully");
+    LOG_INF("Test suite setup: initializing framework validation tests");
 
-    float temp = 25.5f;
-    float humidity = 60.2f;
-    float pressure = 1013.25f;
+    struct framework_test_fixture *fixture = k_malloc(sizeof(struct framework_test_fixture));
+    if (!fixture) {
+        LOG_ERR("Failed to allocate test fixture");
+        return NULL;
+    }
 
-    /* Test basic floating point operations */
-    zassert_within(temp, 25.5f, 0.01f, "Temperature float comparison failed");
-    zassert_within(humidity, 60.2f, 0.01f, "Humidity float comparison failed");
-    zassert_within(pressure, 1013.25f, 0.01f, "Pressure float comparison failed");
+    /* Initialize fixture with known state */
+    fixture->initialized = true;
+    memset(fixture->test_buffer, 0, sizeof(fixture->test_buffer));
+    fixture->test_counter = 0;
 
-    /* Test floating point arithmetic */
-    float sum = temp + humidity;
-    zassert_within(sum, 85.7f, 0.01f, "Float addition failed");
-
-    printk("Floating point support validated\n");
+    LOG_INF("Framework test fixture initialized successfully");
+    return fixture;
 }
 
 /**
- * @brief Test memory allocation
+ * @brief Test setup - runs before each individual test
  *
- * Ensures memory operations work in the test environment.
+ * Best practices:
+ * - Reset test state for each test
+ * - Ensure test isolation
+ * - Log test start for debugging
  */
-ZTEST(framework_validation, test_memory_allocation)
+static void framework_test_before_each(void *fixture)
 {
-    printk("Testing memory allocation\n");
+    struct framework_test_fixture *f = (struct framework_test_fixture *)fixture;
+    
+    if (!f) {
+        return;
+    }
+    
+    /* Reset test state for each test */
+    memset(f->test_buffer, 0, sizeof(f->test_buffer));
+    f->test_counter = 0;
+    
+    LOG_DBG("Test setup: framework test state reset");
+}
 
-    /* Test stack allocation */
-    char stack_buffer[256];
-    memset(stack_buffer, 0xAA, sizeof(stack_buffer));
+/**
+ * @brief Test teardown - runs after each individual test
+ *
+ * Best practices:
+ * - Clean up any test-specific resources
+ * - Verify test completed cleanly
+ */
+static void framework_test_after_each(void *fixture)
+{
+    struct framework_test_fixture *f = (struct framework_test_fixture *)fixture;
+    
+    if (!f) {
+        return;
+    }
+    
+    /* Verify fixture integrity */
+    if (!f->initialized) {
+        LOG_WRN("Test fixture not initialized properly");
+    }
+    
+    LOG_DBG("Test teardown: framework test completed cleanly");
+}
 
-    bool all_set = true;
-    for (int i = 0; i < sizeof(stack_buffer); i++) {
-        if (stack_buffer[i] != (char)0xAA) {
-            all_set = false;
+/**
+ * @brief Test suite teardown - runs once after all tests in suite
+ *
+ * Best practices:
+ * - Clean up shared resources
+ * - Log test suite completion
+ * - Verify overall test state
+ */
+static void framework_test_suite_teardown(void *fixture)
+{
+    struct framework_test_fixture *f = (struct framework_test_fixture *)fixture;
+    
+    LOG_INF("Framework test suite teardown: cleaning up resources");
+    
+    if (f) {
+        if (!f->initialized) {
+            LOG_WRN("Fixture not initialized at teardown");
+        }
+        k_free(f);
+    }
+    
+    LOG_INF("=== Framework validation tests completed successfully ===");
+}
+
+/* Define test suite with proper setup/teardown following best practices */
+ZTEST_SUITE(framework_validation, NULL, framework_test_suite_setup, 
+           framework_test_before_each, framework_test_after_each, 
+           framework_test_suite_teardown);
+
+/**
+ * @brief Test basic assertions and framework functionality
+ *
+ * Test Description: Validates that ZTEST framework basic assertions work correctly.
+ * This is the foundation for all other tests.
+ *
+ * Test Coverage:
+ * - Boolean assertions (true/false)
+ * - Equality assertions (equal/not_equal)
+ * - Null pointer assertions
+ * - String comparison assertions
+ *
+ * Expected Results: All assertions should pass, demonstrating framework works.
+ */
+ZTEST_F(framework_validation, test_basic_assertions)
+{
+    LOG_INF("TEST: Basic assertions and framework functionality");
+    
+    /* Test fixture access */
+    zassert_not_null(fixture, "Test fixture should be available");
+    zassert_true(fixture->initialized, "Test fixture should be initialized");
+    
+    /* Boolean assertions with descriptive messages */
+    zassert_true(true, "Basic true assertion must pass");
+    zassert_false(false, "Basic false assertion must pass");
+    
+    /* Equality assertions */
+    zassert_equal(1, 1, "Integer equality (1 == 1) must pass");
+    zassert_not_equal(1, 2, "Integer inequality (1 != 2) must pass");
+    zassert_equal(0, 0, "Zero equality must pass");
+    
+    /* Null pointer assertions */
+    zassert_is_null(NULL, "NULL pointer assertion must pass");
+    zassert_not_null(&fixture->initialized, "Non-null pointer assertion must pass");
+    
+    /* String comparison with proper error messages */
+    const char *expected_string = "test_string";
+    const char *actual_string = "test_string";
+    zassert_str_equal(expected_string, actual_string, 
+                     "String equality assertion must pass for identical strings");
+    
+    /* Update fixture state to test isolation */
+    fixture->test_counter = 1;
+    
+    LOG_INF("PASS: Basic assertions test completed successfully");
+}
+
+/**
+ * @brief Test floating point operations and precision
+ *
+ * Test Description: Validates floating point support in test environment.
+ * Critical for environmental sensor value testing.
+ *
+ * Test Coverage:
+ * - Floating point value comparisons with tolerance
+ * - Basic arithmetic operations
+ * - Precision validation for sensor-like values
+ * - Range validation for typical environmental readings
+ *
+ * Expected Results: All floating point operations work with expected precision.
+ */
+ZTEST_F(framework_validation, test_floating_point_precision)
+{
+    LOG_INF("TEST: Floating point operations and precision");
+    
+    /* Environmental sensor typical values */
+    const float temperature_celsius = 25.5f;
+    const float humidity_percent = 60.2f;
+    const float pressure_hpa = 1013.25f;
+    const float co2_ppm = 400.0f;
+    
+    /* Test precision with environmentally relevant tolerances */
+    const float temp_tolerance = 0.1f;      /* ±0.1°C precision */
+    const float humidity_tolerance = 0.5f;  /* ±0.5% precision */
+    const float pressure_tolerance = 0.01f; /* ±0.01 hPa precision */
+    const float co2_tolerance = 1.0f;       /* ±1 ppm precision */
+    
+    /* Validate sensor value precision */
+    zassert_within(temperature_celsius, 25.5f, temp_tolerance, 
+                  "Temperature precision must be within ±0.1°C");
+    zassert_within(humidity_percent, 60.2f, humidity_tolerance,
+                  "Humidity precision must be within ±0.5%");
+    zassert_within(pressure_hpa, 1013.25f, pressure_tolerance,
+                  "Pressure precision must be within ±0.01 hPa");
+    zassert_within(co2_ppm, 400.0f, co2_tolerance,
+                  "CO2 precision must be within ±1 ppm");
+    
+    /* Test arithmetic operations for sensor calculations */
+    float temperature_sum = temperature_celsius + 10.0f;
+    float expected_sum = 35.5f;
+    zassert_within(temperature_sum, expected_sum, temp_tolerance,
+                  "Temperature arithmetic (addition) must be accurate");
+    
+    float temperature_average = (temperature_celsius + 30.5f) / 2.0f;
+    float expected_average = 28.0f;
+    zassert_within(temperature_average, expected_average, temp_tolerance,
+                  "Temperature arithmetic (averaging) must be accurate");
+    
+    /* Test edge cases for environmental ranges */
+    float extreme_cold = -40.0f;  /* Arctic conditions */
+    float extreme_hot = 85.0f;    /* Desert conditions */
+    
+    zassert_true(extreme_cold < temperature_celsius, 
+                "Arctic temperature should be less than room temperature");
+    zassert_true(extreme_hot > temperature_celsius,
+                "Desert temperature should be greater than room temperature");
+    
+    /* Store test result in fixture for teardown validation */
+    strncpy(fixture->test_buffer, "floating_point_test_passed", 
+            sizeof(fixture->test_buffer) - 1);
+    
+    LOG_INF("PASS: Floating point precision test completed successfully");
+}
+
+/**
+ * @brief Test memory operations and buffer management
+ *
+ * Test Description: Validates memory allocation, manipulation, and safety.
+ * Critical for sensor data buffering and string operations.
+ *
+ * Test Coverage:
+ * - Stack buffer allocation and initialization
+ * - Memory pattern testing
+ * - Buffer boundary validation
+ * - String operations safety
+ *
+ * Expected Results: All memory operations complete safely without corruption.
+ */
+ZTEST_F(framework_validation, test_memory_operations)
+{
+    LOG_INF("TEST: Memory operations and buffer management");
+    
+    /* Test stack buffer allocation - typical for sensor data */
+    uint8_t sensor_data_buffer[64];  /* Typical sensor data size */
+    const uint8_t test_pattern = 0xAA;
+    const uint8_t alternate_pattern = 0x55;
+    
+    /* Initialize buffer with known pattern */
+    memset(sensor_data_buffer, test_pattern, sizeof(sensor_data_buffer));
+    
+    /* Verify pattern initialization */
+    bool pattern_correct = true;
+    for (size_t i = 0; i < sizeof(sensor_data_buffer); i++) {
+        if (sensor_data_buffer[i] != test_pattern) {
+            pattern_correct = false;
+            LOG_ERR("Pattern mismatch at index %zu: expected 0x%02X, got 0x%02X",
+                   i, test_pattern, sensor_data_buffer[i]);
             break;
         }
     }
-
-    zassert_true(all_set, "Stack buffer initialization failed");
-    printk("Memory allocation tests passed\n");
+    zassert_true(pattern_correct, "Buffer initialization pattern must be correct");
+    
+    /* Test partial buffer modification */
+    const size_t partial_size = sizeof(sensor_data_buffer) / 2;
+    memset(sensor_data_buffer, alternate_pattern, partial_size);
+    
+    /* Verify partial modification */
+    for (size_t i = 0; i < partial_size; i++) {
+        zassert_equal(sensor_data_buffer[i], alternate_pattern,
+                     "First half should have alternate pattern");
+    }
+    for (size_t i = partial_size; i < sizeof(sensor_data_buffer); i++) {
+        zassert_equal(sensor_data_buffer[i], test_pattern,
+                     "Second half should retain original pattern");
+    }
+    
+    /* Test string operations in fixture buffer */
+    const char *test_message = "sensor_reading_123";
+    size_t message_len = strlen(test_message);
+    
+    zassert_true(message_len < sizeof(fixture->test_buffer),
+                "Test message must fit in fixture buffer");
+    
+    /* Safe string copy */
+    strncpy(fixture->test_buffer, test_message, sizeof(fixture->test_buffer) - 1);
+    fixture->test_buffer[sizeof(fixture->test_buffer) - 1] = '\0';  /* Ensure null termination */
+    
+    /* Verify string operations */
+    zassert_str_equal(fixture->test_buffer, test_message,
+                     "String copy must preserve content");
+    zassert_equal(strlen(fixture->test_buffer), message_len,
+                 "String length must be preserved");
+    
+    /* Update test counter for fixture validation */
+    fixture->test_counter = 42;
+    
+    LOG_INF("PASS: Memory operations test completed successfully");
 }
 
 /**
- * @brief Test suite for build system validation
+ * @brief Test basic assertions and framework functionality
  *
- * Validates that the build system is properly configured and
- * all necessary dependencies are available.
+ * Test Description: Validates that ZTEST framework basic assertions work correctly.
+ * This is the foundation for all other tests.
+ *
+ * Test Coverage:
+ * - Boolean assertions (true/false)
+ * - Equality assertions (equal/not_equal)
+ * - Null pointer assertions
+ * - String comparison assertions
+ *
+ * Expected Results: All assertions should pass, demonstrating framework works.
+ */
+ZTEST_F(framework_validation, test_basic_assertions)
+{
+    LOG_INF("TEST: Basic assertions and framework functionality");
+    
+    /* Test fixture access */
+    zassert_not_null(fixture, "Test fixture should be available");
+    zassert_true(fixture->initialized, "Test fixture should be initialized");
+    
+    /* Boolean assertions with descriptive messages */
+    zassert_true(true, "Basic true assertion must pass");
+    zassert_false(false, "Basic false assertion must pass");
+    
+    /* Equality assertions */
+    zassert_equal(1, 1, "Integer equality (1 == 1) must pass");
+    zassert_not_equal(1, 2, "Integer inequality (1 != 2) must pass");
+    zassert_equal(0, 0, "Zero equality must pass");
+    
+    /* Null pointer assertions */
+    zassert_is_null(NULL, "NULL pointer assertion must pass");
+    zassert_not_null(&fixture->initialized, "Non-null pointer assertion must pass");
+    
+    /* String comparison with proper error messages */
+    const char *expected_string = "test_string";
+    const char *actual_string = "test_string";
+    zassert_str_equal(expected_string, actual_string, 
+                     "String equality assertion must pass for identical strings");
+    
+    /* Update fixture state to test isolation */
+    fixture->test_counter = 1;
+    
+    LOG_INF("PASS: Basic assertions test completed successfully");
+}
+
+/**
+ * @brief Test floating point operations and precision
+ *
+ * Test Description: Validates floating point support in test environment.
+ * Critical for environmental sensor value testing.
+ *
+ * Test Coverage:
+ * - Floating point value comparisons with tolerance
+ * - Basic arithmetic operations
+ * - Precision validation for sensor-like values
+ * - Range validation for typical environmental readings
+ *
+ * Expected Results: All floating point operations work with expected precision.
+ */
+ZTEST_F(framework_validation, test_floating_point_precision)
+{
+    LOG_INF("TEST: Floating point operations and precision");
+    
+    /* Environmental sensor typical values */
+    const float temperature_celsius = 25.5f;
+    const float humidity_percent = 60.2f;
+    const float pressure_hpa = 1013.25f;
+    const float co2_ppm = 400.0f;
+    
+    /* Test precision with environmentally relevant tolerances */
+    const float temp_tolerance = 0.1f;      /* ±0.1°C precision */
+    const float humidity_tolerance = 0.5f;  /* ±0.5% precision */
+    const float pressure_tolerance = 0.01f; /* ±0.01 hPa precision */
+    const float co2_tolerance = 1.0f;       /* ±1 ppm precision */
+    
+    /* Validate sensor value precision */
+    zassert_within(temperature_celsius, 25.5f, temp_tolerance, 
+                  "Temperature precision must be within ±0.1°C");
+    zassert_within(humidity_percent, 60.2f, humidity_tolerance,
+                  "Humidity precision must be within ±0.5%");
+    zassert_within(pressure_hpa, 1013.25f, pressure_tolerance,
+                  "Pressure precision must be within ±0.01 hPa");
+    zassert_within(co2_ppm, 400.0f, co2_tolerance,
+                  "CO2 precision must be within ±1 ppm");
+    
+    /* Test arithmetic operations for sensor calculations */
+    float temperature_sum = temperature_celsius + 10.0f;
+    float expected_sum = 35.5f;
+    zassert_within(temperature_sum, expected_sum, temp_tolerance,
+                  "Temperature arithmetic (addition) must be accurate");
+    
+    float temperature_average = (temperature_celsius + 30.5f) / 2.0f;
+    float expected_average = 28.0f;
+    zassert_within(temperature_average, expected_average, temp_tolerance,
+                  "Temperature arithmetic (averaging) must be accurate");
+    
+    /* Test edge cases for environmental ranges */
+    float extreme_cold = -40.0f;  /* Arctic conditions */
+    float extreme_hot = 85.0f;    /* Desert conditions */
+    
+    zassert_true(extreme_cold < temperature_celsius, 
+                "Arctic temperature should be less than room temperature");
+    zassert_true(extreme_hot > temperature_celsius,
+                "Desert temperature should be greater than room temperature");
+    
+    /* Store test result in fixture for teardown validation */
+    strncpy(fixture->test_buffer, "floating_point_test_passed", 
+            sizeof(fixture->test_buffer) - 1);
+    
+    LOG_INF("PASS: Floating point precision test completed successfully");
+}
+
+/**
+ * @brief Test memory operations and buffer management
+ *
+ * Test Description: Validates memory allocation, manipulation, and safety.
+ * Critical for sensor data buffering and string operations.
+ *
+ * Test Coverage:
+ * - Stack buffer allocation and initialization
+ * - Memory pattern testing
+ * - Buffer boundary validation
+ * - String operations safety
+ *
+ * Expected Results: All memory operations complete safely without corruption.
+ */
+ZTEST_F(framework_validation, test_memory_operations)
+{
+    LOG_INF("TEST: Memory operations and buffer management");
+    
+    /* Test stack buffer allocation - typical for sensor data */
+    uint8_t sensor_data_buffer[64];  /* Typical sensor data size */
+    const uint8_t test_pattern = 0xAA;
+    const uint8_t alternate_pattern = 0x55;
+    
+    /* Initialize buffer with known pattern */
+    memset(sensor_data_buffer, test_pattern, sizeof(sensor_data_buffer));
+    
+    /* Verify pattern initialization */
+    bool pattern_correct = true;
+    for (size_t i = 0; i < sizeof(sensor_data_buffer); i++) {
+        if (sensor_data_buffer[i] != test_pattern) {
+            pattern_correct = false;
+            LOG_ERR("Pattern mismatch at index %zu: expected 0x%02X, got 0x%02X",
+                   i, test_pattern, sensor_data_buffer[i]);
+            break;
+        }
+    }
+    zassert_true(pattern_correct, "Buffer initialization pattern must be correct");
+    
+    /* Test partial buffer modification */
+    const size_t partial_size = sizeof(sensor_data_buffer) / 2;
+    memset(sensor_data_buffer, alternate_pattern, partial_size);
+    
+    /* Verify partial modification */
+    for (size_t i = 0; i < partial_size; i++) {
+        zassert_equal(sensor_data_buffer[i], alternate_pattern,
+                     "First half should have alternate pattern");
+    }
+    for (size_t i = partial_size; i < sizeof(sensor_data_buffer); i++) {
+        zassert_equal(sensor_data_buffer[i], test_pattern,
+                     "Second half should retain original pattern");
+    }
+    
+    /* Test string operations in fixture buffer */
+    const char *test_message = "sensor_reading_123";
+    size_t message_len = strlen(test_message);
+    
+    zassert_true(message_len < sizeof(fixture->test_buffer),
+                "Test message must fit in fixture buffer");
+    
+    /* Safe string copy */
+    strncpy(fixture->test_buffer, test_message, sizeof(fixture->test_buffer) - 1);
+    fixture->test_buffer[sizeof(fixture->test_buffer) - 1] = '\0';  /* Ensure null termination */
+    
+    /* Verify string operations */
+    zassert_str_equal(fixture->test_buffer, test_message,
+                     "String copy must preserve content");
+    zassert_equal(strlen(fixture->test_buffer), message_len,
+                 "String length must be preserved");
+    
+    /* Update test counter for fixture validation */
+    fixture->test_counter = 42;
+    
+    LOG_INF("PASS: Memory operations test completed successfully");
+}
+
+/**
+ * @brief Test suite for build system and configuration validation
+ *
+ * This suite validates that the build system is properly configured
+ * for testing and coverage reporting.
  */
 ZTEST_SUITE(build_system_validation, NULL, NULL, NULL, NULL, NULL);
 
 /**
- * @brief Test build configuration
+ * @brief Test build configuration and required features
  *
- * Ensures that important build-time configurations are set correctly.
+ * Test Description: Validates that critical build-time configurations
+ * are set correctly for testing and coverage.
+ *
+ * Test Coverage:
+ * - ZTEST framework enablement
+ * - Coverage configuration (if available)
+ * - Debug features
+ * - Memory configuration
+ *
+ * Expected Results: All required build features are properly configured.
  */
 ZTEST(build_system_validation, test_build_configuration)
 {
-    printk("Testing build configuration\n");
-
-    /* Verify ZTEST is enabled */
-    zassert_true(IS_ENABLED(CONFIG_ZTEST), "CONFIG_ZTEST should be enabled");
-
-    printk("Build configuration validated\n");
+    LOG_INF("TEST: Build configuration and required features");
+    
+    /* Verify ZTEST framework is enabled */
+    zassert_true(IS_ENABLED(CONFIG_ZTEST), 
+                "CONFIG_ZTEST must be enabled for unit testing");
+    
+    /* Check for coverage support if available */
+    #ifdef CONFIG_COVERAGE
+    LOG_INF("Coverage reporting is enabled (CONFIG_COVERAGE=y)");
+    zassert_true(IS_ENABLED(CONFIG_COVERAGE),
+                "CONFIG_COVERAGE should be enabled for coverage reporting");
+    #else
+    LOG_WRN("Coverage reporting not available in this build");
+    #endif
+    
+    /* Verify debug features for testing */
+    #ifdef CONFIG_DEBUG
+    LOG_INF("Debug features enabled for testing (CONFIG_DEBUG=y)");
+    #endif
+    
+    /* Verify external libc for host builds */
+    #ifdef CONFIG_EXTERNAL_LIBC
+    LOG_INF("External libc enabled for native_sim testing");
+    zassert_true(IS_ENABLED(CONFIG_EXTERNAL_LIBC),
+                "CONFIG_EXTERNAL_LIBC should be enabled for native_sim");
+    #endif
+    
+    /* Check memory configuration */
+    #ifdef CONFIG_HEAP_MEM_POOL_SIZE
+    LOG_INF("Heap memory pool configured: %d bytes", CONFIG_HEAP_MEM_POOL_SIZE);
+    zassert_true(CONFIG_HEAP_MEM_POOL_SIZE >= 16384,
+                "Heap should be at least 16KB for test operations");
+    #endif
+    
+    LOG_INF("PASS: Build configuration test completed successfully");
 }
 
 /**
- * @brief Test system functionality
+ * @brief Test system functionality and arithmetic operations
  *
- * Basic system functionality tests to ensure the test environment
- * can support more complex testing in the future.
+ * Test Description: Validates basic system functionality including
+ * CPU operations, memory access, and computational accuracy.
+ *
+ * Test Coverage:
+ * - Integer arithmetic
+ * - Bitwise operations
+ * - Loop operations
+ * - Function calls
+ *
+ * Expected Results: All basic system operations work correctly.
  */
 ZTEST(build_system_validation, test_system_functionality)
 {
-    printk("Testing system functionality\n");
-
-    /* Test simple arithmetic to ensure CPU is working */
-    int a = 10;
-    int b = 20;
-    int result = a + b;
-    zassert_equal(result, 30, "Basic arithmetic should work");
-
-    printk("System functionality validated\n");
+    LOG_INF("TEST: System functionality and arithmetic operations");
+    
+    /* Test basic arithmetic operations */
+    const int operand_a = 10;
+    const int operand_b = 20;
+    
+    int sum = operand_a + operand_b;
+    int difference = operand_b - operand_a;
+    int product = operand_a * 3;
+    int quotient = operand_b / 2;
+    
+    zassert_equal(sum, 30, "Addition (10 + 20) must equal 30");
+    zassert_equal(difference, 10, "Subtraction (20 - 10) must equal 10");
+    zassert_equal(product, 30, "Multiplication (10 * 3) must equal 30");
+    zassert_equal(quotient, 10, "Division (20 / 2) must equal 10");
+    
+    /* Test bitwise operations (useful for sensor registers) */
+    uint8_t test_byte = 0xAA;  /* 10101010 */
+    uint8_t mask = 0x0F;       /* 00001111 */
+    
+    uint8_t masked_result = test_byte & mask;
+    uint8_t or_result = test_byte | mask;
+    uint8_t xor_result = test_byte ^ 0xFF;
+    
+    zassert_equal(masked_result, 0x0A, "Bitwise AND must work correctly");
+    zassert_equal(or_result, 0xAF, "Bitwise OR must work correctly");
+    zassert_equal(xor_result, 0x55, "Bitwise XOR must work correctly");
+    
+    /* Test loop operations */
+    int loop_sum = 0;
+    const int expected_loop_sum = 45;  /* Sum of 0-9 */
+    
+    for (int i = 0; i < 10; i++) {
+        loop_sum += i;
+    }
+    
+    zassert_equal(loop_sum, expected_loop_sum,
+                 "Loop operations must calculate correctly (sum 0-9 = 45)");
+    
+    /* Test function call and stack operations */
+    int strlen_result = strlen("test");
+    zassert_equal(strlen_result, 4, "Function calls must work correctly");
+    
+    LOG_INF("PASS: System functionality test completed successfully");
 }

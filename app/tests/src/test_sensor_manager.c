@@ -252,7 +252,6 @@ ZTEST(sensor_manager, test_sensor_error_handling)
     zassert_equal(ret, -EIO, "Should return EIO when fetch fails");
     
     /* Test 3: I2C communication failure */
-    uint8_t dummy_reg = 0x00;
     uint8_t dummy_buffer[1];
     
     /* Set I2C device not ready */
