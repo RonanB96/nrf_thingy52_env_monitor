@@ -61,3 +61,10 @@ external
 .vscode/.cache
 
 modules
+
+# Coverage reports
+coverage/
+*.gcov
+*.gcda
+*.gcno
+*.info

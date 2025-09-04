@@ -10,7 +10,7 @@ project(nrf_thingy_env_monitor_tests)
 
 # Test source files with mocking framework
 target_sources(app PRIVATE
-    src/test_main_simple.c
+    src/test_main.c
     src/test_battery_service.c
     src/test_ess_service.c
     src/test_mock_framework.c

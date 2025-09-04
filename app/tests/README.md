@@ -383,7 +383,7 @@ gcovr --root . --filter '.*app/tests/src/.*\.c$' \
 TOTAL: 273 lines, 273 executed, 100% coverage
 - test_battery_service.c:     14/14   lines (100%)
 - test_ess_service.c:        14/14   lines (100%) 
-- test_main_simple.c:        40/40   lines (100%)
+- test_main.c:               40/40   lines (100%)
 - test_mock_framework.c:    103/103  lines (100%)
 - test_sensor_manager.c:    102/102  lines (100%)
 ```
@@ -432,16 +432,119 @@ Coverage reports are available in the "test-results-and-coverage" artifact after
 
 ## C Unit Testing Best Practices
 
-The test framework follows industry-standard C unit testing practices. See [C_UNIT_TESTING_BEST_PRACTICES.md](C_UNIT_TESTING_BEST_PRACTICES.md) for comprehensive guidelines covering:
+This framework follows industry-standard C unit testing best practices for embedded systems development.
 
-- Test organization and naming conventions
-- Setup/teardown patterns for test isolation
-- Assertion best practices with descriptive error messages
-- Mock framework design patterns
-- Error condition testing strategies
-- Performance and memory testing approaches
-- Coverage analysis and reporting
-- CI/CD integration patterns
+### Test Organization Principles
+
+#### Test Structure and Naming
+
+**Test File Naming Convention:**
+- `test_<module_name>.c` - Primary test file for module
+- `test_<feature>_<specific_aspect>.c` - Feature-specific tests
+- Files should mirror the source structure: `src/sensor_manager.c` → `tests/src/test_sensor_manager.c`
+
+**Test Function Naming:**
+```c
+// Pattern: test_<module>_<functionality>_<condition>
+ZTEST(sensor_manager, test_hts221_read_temperature_success)
+ZTEST(sensor_manager, test_hts221_read_temperature_i2c_error)
+ZTEST(sensor_manager, test_battery_voltage_low_threshold)
+```
+
+**Test Suite Organization:**
+- Group related tests in logical suites
+- Use descriptive suite names that match modules or features
+- Separate integration tests from unit tests
+
+#### Test Fixtures and Setup/Teardown
+
+**Best Practice Implementation:**
+```c
+struct sensor_test_fixture {
+    struct device mock_i2c_dev;
+    struct device mock_sensor_dev;
+    bool initialized;
+    int test_iteration;
+};
+
+static void *sensor_test_suite_setup(void)
+{
+    /* One-time setup for entire test suite */
+    struct sensor_test_fixture *fixture = k_malloc(sizeof(*fixture));
+    
+    /* Initialize mocks once */
+    mock_i2c_init();
+    mock_sensor_init();
+    
+    fixture->initialized = true;
+    return fixture;
+}
+
+static void sensor_test_before_each(void *fixture)
+{
+    /* Reset state for each test - ensures test isolation */
+    mock_i2c_reset();
+    mock_sensor_reset();
+}
+
+ZTEST_SUITE(sensor_manager, NULL, sensor_test_suite_setup, 
+           sensor_test_before_each, NULL, sensor_test_suite_teardown);
+```
+
+#### Comprehensive Assertions
+
+**Descriptive Error Messages:**
+```c
+zassert_equal(actual_temp, expected_temp, 
+             "Temperature reading mismatch: expected %.2f°C, got %.2f°C",
+             expected_temp, actual_temp);
+
+zassert_within(voltage, 3.3f, 0.1f,
+              "Battery voltage %.2fV outside acceptable range (3.2V-3.4V)", voltage);
+```
+
+**Error Condition Testing:**
+```c
+ZTEST(sensor_manager, test_i2c_communication_failure)
+{
+    /* Inject I2C error */
+    mock_i2c_set_next_error(-EIO);
+    
+    /* Attempt sensor read */
+    int ret = sensor_manager_read_temperature();
+    
+    /* Verify graceful error handling */
+    zassert_equal(ret, -EIO, "Should propagate I2C error");
+    zassert_false(sensor_manager_is_data_valid(), "Data should be marked invalid");
+}
+```
+
+#### Mock Framework Best Practices
+
+**Transaction-Based Validation:**
+```c
+/* Setup expected I2C transactions */
+mock_i2c_expect_write(HTS221_I2C_ADDR, HTS221_CTRL_REG1, 0x85);
+mock_i2c_expect_read(HTS221_I2C_ADDR, HTS221_TEMP_OUT_L, temp_data, 2);
+
+/* Execute function under test */
+int ret = hts221_read_temperature(&temp_value);
+
+/* Verify all expected transactions occurred */
+mock_i2c_verify_all_transactions();
+zassert_ok(ret, "Temperature read should succeed");
+```
+
+**State Validation:**
+```c
+/* Verify sensor power state transitions */
+mock_gpio_expect_pin_set(SENSOR_POWER_PIN, 1);  /* Power on */
+mock_gpio_expect_pin_set(SENSOR_POWER_PIN, 0);  /* Power off */
+
+ret = sensor_manager_single_shot_read();
+
+mock_gpio_verify_all_calls();
+```
 
 ## Integration with Development Workflow
 
