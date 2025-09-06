@@ -82,51 +82,30 @@ jobs:
         if [ $(find build/tests -name "*.gcno" -o -name "*.gcda" | wc -l) -eq 0 ]; then
           echo "No coverage files found. Checking build directory structure..."
           find build -name "*.gcno" -o -name "*.gcda" | head -10
-          echo "Checking CMakeFiles for coverage objects..."
-          find build -path "*/CMakeFiles/*.dir/*.gcno" | head -10
+          echo "Coverage may not be enabled in build"
         fi
         
-        # Generate HTML coverage report with lcov
-        lcov --capture --directory build/tests --output-file coverage/coverage.info \
-          --rc lcov_branch_coverage=1 || echo "LCOV collection completed with issues"
-        
-        # Check if coverage.info was created and has content
-        if [ -f coverage/coverage.info ] && [ -s coverage/coverage.info ]; then
-          echo "Coverage data collected successfully"
-          
-          # Filter out system headers, keep only test source files
-          lcov --extract coverage/coverage.info \
-            '*/app/tests/src/*' \
-            --output-file coverage/coverage_filtered.info \
-            --rc lcov_branch_coverage=1 || echo "LCOV filtering completed"
-          
-          # Generate HTML report
-          genhtml coverage/coverage_filtered.info --output-directory coverage/html \
-            --title "Nordic Thingy:52 Test Coverage" \
-            --show-details --legend \
-            --rc lcov_branch_coverage=1 || echo "HTML generation completed"
-        else
-          echo "No coverage data collected"
-        fi
-        
-        # Generate JSON coverage report with gcovr for better CI integration
+        # Generate coverage reports with gcovr (more reliable than lcov for this case)
         gcovr --root . \
           --filter '.*app/tests/src/.*\.c$' \
           --exclude '.*app/tests/src/mocks/.*' \
           --json coverage/coverage.json \
           --html coverage/coverage.html \
           --txt coverage/coverage.txt \
-          build/tests || echo "gcovr generation completed"
+          build/tests || echo "gcovr generation completed with issues"
         
         # Display coverage summary
         if [ -f coverage/coverage.txt ]; then
           echo "Coverage Summary:"
           cat coverage/coverage.txt
         else
-          echo "No coverage.txt found, listing available files:"
+          echo "No coverage.txt found, checking available files:"
           ls -la coverage/ || echo "No coverage directory found"
           echo "Test executable info:"
           ls -la build/tests/zephyr/ | grep -E "(zephyr\.exe|zephyr\.elf)" || echo "No test executable found"
+          # Generate minimal coverage summary if main report failed
+          echo "Fallback: listing coverage data files:"
+          find build/tests -name "*.gcda" | wc -l | xargs echo "Coverage data files found:"
         fi
         
     - name: Coverage Summary Comment

@@ -1,0 +1,145 @@
+WARNING: Using a test - not safe - entropy source
+*** Booting nRF Connect SDK v3.0.2-89ba1294ac9b ***
+*** Using Zephyr OS v4.0.99-825150eccf5b ***
+Running TESTSUITE battery_service
+===================================================================
+[00:00:00.000,000] [0m<inf> test_battery_service: Setting up battery service tests[0m
+START - test_battery_level_reading
+[00:00:00.000,000] [0m<inf> test_battery_service: Testing battery level reading[0m
+ PASS - test_battery_level_reading in 0.000 seconds
+===================================================================
+START - test_battery_service_init
+[00:00:00.000,000] [0m<inf> test_battery_service: Testing battery service initialization[0m
+ PASS - test_battery_service_init in 0.000 seconds
+===================================================================
+TESTSUITE battery_service succeeded
+[00:00:00.000,000] [0m<inf> test_battery_service: Tearing down battery service tests[0m
+Running TESTSUITE ess_service
+===================================================================
+[00:00:00.000,000] [0m<inf> test_ess_service: Setting up ESS service tests[0m
+START - test_ess_characteristic_updates
+[00:00:00.000,000] [0m<inf> test_ess_service: Testing ESS characteristic updates[0m
+ PASS - test_ess_characteristic_updates in 0.000 seconds
+===================================================================
+START - test_ess_service_init
+[00:00:00.000,000] [0m<inf> test_ess_service: Testing ESS service initialization[0m
+ PASS - test_ess_service_init in 0.000 seconds
+===================================================================
+TESTSUITE ess_service succeeded
+[00:00:00.000,000] [0m<inf> test_ess_service: Tearing down ESS service tests[0m
+Running TESTSUITE framework_validation
+===================================================================
+[00:00:00.000,000] [0m<inf> test_main: === Starting Nordic Thingy:52 Environmental Monitor Test Suite ===[0m
+[00:00:00.000,000] [0m<inf> test_main: ZTEST Framework initialized successfully[0m
+[00:00:00.000,000] [0m<inf> test_main: Test suite setup: initializing framework validation tests[0m
+[00:00:00.000,000] [0m<inf> test_main: Framework test fixture initialized successfully[0m
+START - test_basic_assertions
+[00:00:00.000,000] [0m<inf> test_main: TEST: Basic assertions and framework functionality[0m
+[00:00:00.000,000] [0m<inf> test_main: PASS: Basic assertions test completed successfully[0m
+ PASS - test_basic_assertions in 0.000 seconds
+===================================================================
+START - test_floating_point_precision
+[00:00:00.000,000] [0m<inf> test_main: TEST: Floating point operations and precision[0m
+[00:00:00.000,000] [0m<inf> test_main: PASS: Floating point precision test completed successfully[0m
+ PASS - test_floating_point_precision in 0.000 seconds
+===================================================================
+START - test_memory_operations
+[00:00:00.000,000] [0m<inf> test_main: TEST: Memory operations and buffer management[0m
+[00:00:00.000,000] [0m<inf> test_main: PASS: Memory operations test completed successfully[0m
+ PASS - test_memory_operations in 0.000 seconds
+===================================================================
+TESTSUITE framework_validation succeeded
+[00:00:00.000,000] [0m<inf> test_main: Framework test suite teardown: cleaning up resources[0m
+[00:00:00.000,000] [0m<inf> test_main: === Framework validation tests completed successfully ===[0m
+Running TESTSUITE mock_framework
+===================================================================
+[00:00:00.000,000] [0m<inf> test_mocks: Setting up mock framework tests[0m
+START - test_gpio_mock_basic
+[00:00:00.000,000] [0m<inf> test_mocks: Testing GPIO mock basic functionality[0m
+[00:00:00.000,000] [0m<inf> test_mocks: GPIO mock test passed[0m
+ PASS - test_gpio_mock_basic in 0.000 seconds
+===================================================================
+START - test_i2c_mock_basic
+[00:00:00.000,000] [0m<inf> test_mocks: Testing I2C mock basic functionality[0m
+[00:00:00.000,000] [0m<inf> mock_i2c: All 1 expected I2C transactions completed successfully[0m
+[00:00:00.000,000] [0m<inf> test_mocks: I2C mock test passed[0m
+ PASS - test_i2c_mock_basic in 0.000 seconds
+===================================================================
+START - test_mock_complex_scenarios
+[00:00:00.000,000] [0m<inf> test_mocks: Testing complex mock interaction scenarios[0m
+[00:00:00.000,000] [0m<inf> mock_i2c: All 1 expected I2C transactions completed successfully[0m
+[00:00:00.000,000] [0m<inf> test_mocks: Complex mock scenario test passed[0m
+ PASS - test_mock_complex_scenarios in 0.000 seconds
+===================================================================
+START - test_mock_error_conditions
+[00:00:00.000,000] [0m<inf> test_mocks: Testing mock error conditions[0m
+[00:00:00.000,000] [1;33m<wrn> mock_i2c: I2C device not ready[0m
+[00:00:00.000,000] [1;33m<wrn> mock_gpio: GPIO device not ready[0m
+[00:00:00.000,000] [1;33m<wrn> mock_sensor: Sensor device not ready[0m
+[00:00:00.000,000] [1;33m<wrn> mock_sensor: Sensor fetch configured to fail[0m
+[00:00:00.000,000] [0m<inf> test_mocks: Mock error condition tests passed[0m
+ PASS - test_mock_error_conditions in 0.000 seconds
+===================================================================
+START - test_sensor_mock_basic
+[00:00:00.000,000] [0m<inf> test_mocks: Testing sensor mock basic functionality[0m
+[00:00:00.000,000] [0m<inf> test_mocks: Sensor mock test passed[0m
+ PASS - test_sensor_mock_basic in 0.000 seconds
+===================================================================
+TESTSUITE mock_framework succeeded
+[00:00:00.000,000] [0m<inf> test_mocks: Tearing down mock framework tests[0m
+Running TESTSUITE sensor_manager
+===================================================================
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Setting up sensor manager tests[0m
+START - test_sensor_data_reading_workflow
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Testing sensor data reading workflow[0m
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Sensor data reading workflow test passed[0m
+ PASS - test_sensor_data_reading_workflow in 0.000 seconds
+===================================================================
+START - test_sensor_error_handling
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Testing sensor error handling[0m
+[00:00:00.000,000] [1;33m<wrn> mock_sensor: Sensor device not ready[0m
+[00:00:00.000,000] [1;33m<wrn> mock_sensor: Sensor fetch configured to fail[0m
+[00:00:00.000,000] [1;33m<wrn> mock_i2c: I2C device not ready[0m
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Sensor error handling test passed[0m
+ PASS - test_sensor_error_handling in 0.000 seconds
+===================================================================
+START - test_sensor_manager_init_workflow
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Testing sensor manager initialization workflow[0m
+[00:00:00.000,000] [0m<inf> mock_i2c: All 3 expected I2C transactions completed successfully[0m
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Sensor manager initialization workflow test passed[0m
+ PASS - test_sensor_manager_init_workflow in 0.000 seconds
+===================================================================
+TESTSUITE sensor_manager succeeded
+[00:00:00.000,000] [0m<inf> test_sensor_manager: Tearing down sensor manager tests[0m
+
+------ TESTSUITE SUMMARY START ------
+
+SUITE PASS - 100.00% [battery_service]: pass = 2, fail = 0, skip = 0, total = 2 duration = 0.000 seconds
+ - PASS - [battery_service.test_battery_level_reading] duration = 0.000 seconds
+ - PASS - [battery_service.test_battery_service_init] duration = 0.000 seconds
+
+SUITE PASS - 100.00% [ess_service]: pass = 2, fail = 0, skip = 0, total = 2 duration = 0.000 seconds
+ - PASS - [ess_service.test_ess_characteristic_updates] duration = 0.000 seconds
+ - PASS - [ess_service.test_ess_service_init] duration = 0.000 seconds
+
+SUITE PASS - 100.00% [framework_validation]: pass = 3, fail = 0, skip = 0, total = 3 duration = 0.000 seconds
+ - PASS - [framework_validation.test_basic_assertions] duration = 0.000 seconds
+ - PASS - [framework_validation.test_floating_point_precision] duration = 0.000 seconds
+ - PASS - [framework_validation.test_memory_operations] duration = 0.000 seconds
+
+SUITE PASS - 100.00% [mock_framework]: pass = 5, fail = 0, skip = 0, total = 5 duration = 0.000 seconds
+ - PASS - [mock_framework.test_gpio_mock_basic] duration = 0.000 seconds
+ - PASS - [mock_framework.test_i2c_mock_basic] duration = 0.000 seconds
+ - PASS - [mock_framework.test_mock_complex_scenarios] duration = 0.000 seconds
+ - PASS - [mock_framework.test_mock_error_conditions] duration = 0.000 seconds
+ - PASS - [mock_framework.test_sensor_mock_basic] duration = 0.000 seconds
+
+SUITE PASS - 100.00% [sensor_manager]: pass = 3, fail = 0, skip = 0, total = 3 duration = 0.000 seconds
+ - PASS - [sensor_manager.test_sensor_data_reading_workflow] duration = 0.000 seconds
+ - PASS - [sensor_manager.test_sensor_error_handling] duration = 0.000 seconds
+ - PASS - [sensor_manager.test_sensor_manager_init_workflow] duration = 0.000 seconds
+
+------ TESTSUITE SUMMARY END ------
+
+===================================================================
+PROJECT EXECUTION SUCCESSFUL

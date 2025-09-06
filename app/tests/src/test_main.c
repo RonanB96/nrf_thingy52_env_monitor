@@ -28,7 +28,7 @@ LOG_MODULE_REGISTER(test_main, CONFIG_LOG_DEFAULT_LEVEL);
 /**
  * @brief Global test fixture for framework validation
  */
-struct framework_test_fixture {
+struct framework_validation_fixture {
     bool initialized;
     char test_buffer[256];
     int test_counter;
@@ -48,7 +48,7 @@ static void *framework_test_suite_setup(void)
     LOG_INF("ZTEST Framework initialized successfully");
     LOG_INF("Test suite setup: initializing framework validation tests");
 
-    struct framework_test_fixture *fixture = k_malloc(sizeof(struct framework_test_fixture));
+    struct framework_validation_fixture *fixture = k_malloc(sizeof(struct framework_validation_fixture));
     if (!fixture) {
         LOG_ERR("Failed to allocate test fixture");
         return NULL;
@@ -73,7 +73,7 @@ static void *framework_test_suite_setup(void)
  */
 static void framework_test_before_each(void *fixture)
 {
-    struct framework_test_fixture *f = (struct framework_test_fixture *)fixture;
+    struct framework_validation_fixture *f = (struct framework_validation_fixture *)fixture;
     
     if (!f) {
         return;
@@ -95,7 +95,7 @@ static void framework_test_before_each(void *fixture)
  */
 static void framework_test_after_each(void *fixture)
 {
-    struct framework_test_fixture *f = (struct framework_test_fixture *)fixture;
+    struct framework_validation_fixture *f = (struct framework_validation_fixture *)fixture;
     
     if (!f) {
         return;
@@ -119,7 +119,7 @@ static void framework_test_after_each(void *fixture)
  */
 static void framework_test_suite_teardown(void *fixture)
 {
-    struct framework_test_fixture *f = (struct framework_test_fixture *)fixture;
+    struct framework_validation_fixture *f = (struct framework_validation_fixture *)fixture;
     
     LOG_INF("Framework test suite teardown: cleaning up resources");
     
