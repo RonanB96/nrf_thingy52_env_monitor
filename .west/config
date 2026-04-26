@@ -4,7 +4,6 @@ file = west.yml
 
 [zephyr]
 base = modules/zephyr
-sdk-install-dir = ${HOME}/ncs/toolchains/911f4c5c26/opt/zephyr-sdk
 
 [build]
 board = thingy52/nrf52832

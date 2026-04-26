@@ -45,7 +45,7 @@ BT_GATT_SERVICE_DEFINE(uptime_svc, BT_GATT_PRIMARY_SERVICE(BT_UUID_UPTIME_SERVIC
 		       /* Uptime Characteristic */
 		       BT_GATT_CHARACTERISTIC(BT_UUID_UPTIME_CHAR, BT_GATT_CHRC_READ,
 					      BT_GATT_PERM_READ, read_uptime, NULL, NULL),
-		       BT_GATT_CUD("Device Uptime (seconds)", BT_GATT_PERM_READ), );
+		       BT_GATT_CUD("Device Uptime (seconds)", BT_GATT_PERM_READ));
 
 int uptime_service_init(void)
 {

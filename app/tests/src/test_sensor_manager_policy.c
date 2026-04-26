@@ -10,11 +10,7 @@
 
 LOG_MODULE_REGISTER(test_sensor_manager_policy, CONFIG_LOG_DEFAULT_LEVEL);
 
-#ifdef CONFIG_SENSOR_AIR_QUALITY_DIVISOR
-#define TEST_AQ_DIVISOR CONFIG_SENSOR_AIR_QUALITY_DIVISOR
-#else
-#define TEST_AQ_DIVISOR 2U
-#endif
+#define TEST_AQ_DIVISOR_TWO 2U
 
 #ifdef CONFIG_SENSOR_ENV_INTERVAL_SEC
 #define TEST_SAMPLING_INTERVAL_SEC CONFIG_SENSOR_ENV_INTERVAL_SEC
@@ -74,22 +70,22 @@ ZTEST_SUITE(sensor_manager_aq_divisor, NULL, NULL, NULL, NULL, NULL);
 ZTEST(sensor_manager_aq_divisor, test_first_cycle_skips_aq)
 {
 	/* Cycle 1 (first scheduled read): odd → AQ should be skipped */
-	zassert_false(should_read_aq(1, TEST_AQ_DIVISOR), "Cycle 1 must NOT read AQ (divisor=%u)",
-		      TEST_AQ_DIVISOR);
+	zassert_false(should_read_aq(1, TEST_AQ_DIVISOR_TWO),
+		      "Cycle 1 must NOT read AQ (divisor=%u)", TEST_AQ_DIVISOR_TWO);
 }
 
 ZTEST(sensor_manager_aq_divisor, test_second_cycle_reads_aq)
 {
 	/* Cycle 2: even → AQ should be included */
-	zassert_true(should_read_aq(2, TEST_AQ_DIVISOR), "Cycle 2 must read AQ (divisor=%u)",
-		     TEST_AQ_DIVISOR);
+	zassert_true(should_read_aq(2, TEST_AQ_DIVISOR_TWO), "Cycle 2 must read AQ (divisor=%u)",
+		     TEST_AQ_DIVISOR_TWO);
 }
 
 ZTEST(sensor_manager_aq_divisor, test_odd_cycles_skip_aq)
 {
 	/* All odd cycles should skip AQ */
 	for (uint32_t cycle = 1; cycle <= 9; cycle += 2) {
-		zassert_false(should_read_aq(cycle, TEST_AQ_DIVISOR),
+		zassert_false(should_read_aq(cycle, TEST_AQ_DIVISOR_TWO),
 			      "Odd cycle %u must NOT read AQ", cycle);
 	}
 }
@@ -98,7 +94,7 @@ ZTEST(sensor_manager_aq_divisor, test_even_cycles_read_aq)
 {
 	/* All even cycles should include AQ */
 	for (uint32_t cycle = 2; cycle <= 10; cycle += 2) {
-		zassert_true(should_read_aq(cycle, TEST_AQ_DIVISOR), "Even cycle %u must read AQ",
+		zassert_true(should_read_aq(cycle, TEST_AQ_DIVISOR_TWO), "Even cycle %u must read AQ",
 			     cycle);
 	}
 }

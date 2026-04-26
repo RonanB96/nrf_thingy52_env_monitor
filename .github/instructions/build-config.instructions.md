@@ -1,7 +1,7 @@
 ---
 name: Build and Config Files
 description: Use when editing CMake, Kconfig, west manifest, project config, or board .conf files.
-applyTo: CMakeLists.txt,Kconfig.*,prj.conf,*.conf,west.yml,*.cmake"
+applyTo: CMakeLists.txt,Kconfig.*,prj.conf,*.conf,west.yml,*.cmake
 ---
 # Build and Configuration Rules
 
