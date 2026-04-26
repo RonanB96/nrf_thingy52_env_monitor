@@ -105,6 +105,10 @@ jobs:
                   python3 -m pip install --upgrade pip
                   python3 -m pip install west codechecker
 
+            - name: Reset west workspace metadata
+              run: |
+                  rm -rf .west
+
             - name: Setup Zephyr project
               uses: zephyrproject-rtos/action-zephyr-setup@v1
               with:
