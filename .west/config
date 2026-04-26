@@ -4,8 +4,9 @@ file = west.yml
 
 [zephyr]
 base = modules/zephyr
-sdk-install-dir = /home/ronan/ncs/toolchains/c5be9c56c7/opt/zephyr-sdk
+sdk-install-dir = ${HOME}/ncs/toolchains/911f4c5c26/opt/zephyr-sdk
 
 [build]
-cmake-args = 
-
+board = thingy52/nrf52832
+pristine = auto
+dir-fmt = build/{board}/{app}

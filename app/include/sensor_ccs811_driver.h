@@ -111,8 +111,8 @@ bool ccs811_driver_is_enabled(void);
  * @param humidity_percent Humidity for environmental compensation (can be NaN if not available)
  * @return 0 on success, negative error code on failure
  */
-int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb,
-				    float temp_celsius, float humidity_percent);
+int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float temp_celsius,
+				   float humidity_percent);
 
 /**
  * @brief Read air quality data for BLE with cached fallback
@@ -127,27 +127,30 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb,
  * @param humidity_percent Humidity for environmental compensation (can be NaN if not available)
  * @return 0 on success, negative error code on failure
  */
-int ccs811_driver_read_for_ble(uint16_t *co2_ppm, uint16_t *tvoc_ppb,
-			       float temp_celsius, float humidity_percent);
+int ccs811_driver_read_for_ble(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float temp_celsius,
+			       float humidity_percent);
 
 /**
  * @brief Get current CCS811 measurement mode
  *
- * @return Current measurement mode (enum ccs811_measurement_mode), or negative error code on failure
+ * @return Current measurement mode (enum ccs811_measurement_mode), or negative error code on
+ * failure
  */
-int ccs811_driver_get_mode(void);/**
- * @brief Change CCS811 measurement mode
- *
- * Allows dynamic switching between different measurement intervals:
- * - CCS811_MODE_IDLE: No measurements
- * - CCS811_MODE_IAQ_1SEC: Measurement every 1 second
- * - CCS811_MODE_IAQ_10SEC: Measurement every 10 seconds
- * - CCS811_MODE_IAQ_60SEC: Measurement every 60 seconds
- * - CCS811_MODE_IAQ_250MSEC: Measurement every 250 milliseconds
- *
- * @param mode New measurement mode (use enum ccs811_measurement_mode or CCS811_MODE_* constants)
- * @return 0 on success, negative error code on failure
- */
+int ccs811_driver_get_mode(
+	void); /**
+		* @brief Change CCS811 measurement mode
+		*
+		* Allows dynamic switching between different measurement intervals:
+		* - CCS811_MODE_IDLE: No measurements
+		* - CCS811_MODE_IAQ_1SEC: Measurement every 1 second
+		* - CCS811_MODE_IAQ_10SEC: Measurement every 10 seconds
+		* - CCS811_MODE_IAQ_60SEC: Measurement every 60 seconds
+		* - CCS811_MODE_IAQ_250MSEC: Measurement every 250 milliseconds
+		*
+		* @param mode New measurement mode (use enum ccs811_measurement_mode or
+		* CCS811_MODE_* constants)
+		* @return 0 on success, negative error code on failure
+		*/
 int ccs811_driver_set_mode(enum ccs811_measurement_mode mode);
 
 /**

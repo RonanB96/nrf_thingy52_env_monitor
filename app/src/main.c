@@ -89,6 +89,10 @@ int main(void)
 	}
 	LOG_INF("Environmental Sensing Service initialized");
 
+	/* Start periodic sensor readings */
+	sensor_manager_start_periodic(CONFIG_SENSOR_ENV_INTERVAL_SEC * 1000U);
+	LOG_INF("Periodic sensor updates started");
+
 	/* Initialize Uptime Service */
 	LOG_DBG("Initializing Uptime Service");
 	ret = uptime_service_init();

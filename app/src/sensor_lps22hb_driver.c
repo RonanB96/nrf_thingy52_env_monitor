@@ -19,14 +19,14 @@
 
 LOG_MODULE_REGISTER(lps22hb_driver, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define LPS22HB_I2C_ADDR        0x5C
+#define LPS22HB_I2C_ADDR 0x5C
 
 /* Device tree node */
 #define LPS22HB_NODE DT_NODELABEL(lps22hb_press)
 
 /* Additional LPS22HB status register masks */
-#define LPS22HB_DRDY_PRESS_MASK 0x01  /* Pressure data available */
-#define LPS22HB_DRDY_TEMP_MASK  0x02  /* Temperature data available */
+#define LPS22HB_DRDY_PRESS_MASK 0x01 /* Pressure data available */
+#define LPS22HB_DRDY_TEMP_MASK  0x02 /* Temperature data available */
 
 /* Static state */
 static const struct device *lps22hb_dev = NULL;
@@ -43,6 +43,9 @@ static struct gpio_callback lps22hb_cb_data;
 /* LPS22HB Data Ready Interrupt Handler */
 static void lps22hb_drdy_callback(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
+	(void)dev;
+	(void)cb;
+	(void)pins;
 	k_sem_give(&data_ready_sem);
 }
 
@@ -91,7 +94,8 @@ int lps22hb_driver_init(const struct device *i2c_device, const struct gpio_dt_sp
 			return ret;
 		}
 
-		gpio_init_callback(&lps22hb_cb_data, lps22hb_drdy_callback, BIT(lps22hb_int_pin.pin));
+		gpio_init_callback(&lps22hb_cb_data, lps22hb_drdy_callback,
+				   BIT(lps22hb_int_pin.pin));
 		ret = gpio_add_callback(lps22hb_int_pin.port, &lps22hb_cb_data);
 		if (ret < 0) {
 			LOG_WRN("Failed to add LPS22HB INT callback: %d", ret);
@@ -140,7 +144,7 @@ int lps22hb_driver_power_on(void)
 		return ret;
 	}
 
-	res_conf &= ~LPS22HB_SHIFT_RES_CONF_LC_EN;  /* Clear LC_EN = normal current mode */
+	res_conf &= ~LPS22HB_SHIFT_RES_CONF_LC_EN; /* Clear LC_EN = normal current mode */
 
 	ret = i2c_reg_write_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_RES_CONF, res_conf);
 	if (ret < 0) {
@@ -150,7 +154,8 @@ int lps22hb_driver_power_on(void)
 
 	/* Configure CTRL_REG3 to enable data ready interrupt if supported */
 	if (interrupt_initialized) {
-		ret = i2c_reg_read_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_CTRL_REG3, &ctrl_reg3);
+		ret = i2c_reg_read_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_CTRL_REG3,
+					&ctrl_reg3);
 		if (ret < 0) {
 			LOG_ERR("Failed to read LPS22HB CTRL_REG3: %d", ret);
 			return ret;
@@ -159,7 +164,8 @@ int lps22hb_driver_power_on(void)
 		/* Enable DRDY signal on INT_DRDY pin (active high, push-pull) */
 		ctrl_reg3 |= LPS22HB_MASK_CTRL_REG3_DRDY;
 
-		ret = i2c_reg_write_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_CTRL_REG3, ctrl_reg3);
+		ret = i2c_reg_write_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_CTRL_REG3,
+					 ctrl_reg3);
 		if (ret < 0) {
 			LOG_ERR("Failed to enable LPS22HB DRDY interrupt: %d", ret);
 			return ret;
@@ -269,7 +275,7 @@ int lps22hb_driver_power_off(void)
 		return ret;
 	}
 
-	res_conf |= LPS22HB_SHIFT_RES_CONF_LC_EN;  /* Set LC_EN = low current mode (~5µA) */
+	res_conf |= LPS22HB_SHIFT_RES_CONF_LC_EN; /* Set LC_EN = low current mode (~5µA) */
 
 	ret = i2c_reg_write_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_RES_CONF, res_conf);
 	if (ret < 0) {
@@ -312,7 +318,7 @@ int lps22hb_driver_read_pressure(float *pressure)
 	k_msleep(50);
 
 	ret = lps22hb_driver_trigger_oneshot();
-	if (ret !=0){
+	if (ret != 0) {
 		LOG_ERR("Failed to trigger LPS22HB one-shot: %d", ret);
 		goto power_down;
 	}

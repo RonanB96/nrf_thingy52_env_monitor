@@ -12,7 +12,7 @@
 #include <stddef.h>
 
 /* Device naming constants */
-#define DEVICE_PREFIX "T52"
+#define DEVICE_PREFIX       "T52"
 #define DEVICE_NAME_MAX_LEN 64
 
 #ifdef __cplusplus

@@ -18,13 +18,13 @@ extern "C" {
  * @brief Sensor selection flags for selective updates
  */
 enum sensor_select {
-	SENSOR_NONE        = 0x00,
+	SENSOR_NONE = 0x00,
 	SENSOR_TEMPERATURE = 0x01,
-	SENSOR_HUMIDITY    = 0x02,
-	SENSOR_PRESSURE    = 0x04,
-	SENSOR_AIR_QUALITY = 0x08,  /* CO2 + TVOC */
-	SENSOR_BATTERY     = 0x10,
-	SENSOR_ALL         = 0xFF
+	SENSOR_HUMIDITY = 0x02,
+	SENSOR_PRESSURE = 0x04,
+	SENSOR_AIR_QUALITY = 0x08, /* CO2 + TVOC */
+	SENSOR_BATTERY = 0x10,
+	SENSOR_ALL = 0xFF
 };
 
 /**

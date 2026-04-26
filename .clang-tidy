@@ -1,0 +1,24 @@
+# clang-tidy configuration for nrf_thingy52_env_monitor
+#
+# Checks are a conservative baseline compatible with Zephyr kernel headers and macros.
+# Extend as needed for stricter analysis.
+
+Checks: >
+  clang-diagnostic-*,
+  -clang-diagnostic-reserved-identifier,
+  -clang-diagnostic-reserved-macro-identifier,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  bugprone-*,
+  -bugprone-reserved-identifier,
+  -bugprone-easily-swappable-parameters,
+  misc-*,
+  -misc-include-cleaner,
+  performance-*,
+  -performance-no-int-to-ptr,
+  portability-*,
+  readability-braces-around-statements,
+  readability-redundant-control-flow
+
+# Restrict warnings to project source only — suppress noise from SDK/Zephyr headers.
+HeaderFilterRegex: '^app/(src|include|tests/src)/.*'

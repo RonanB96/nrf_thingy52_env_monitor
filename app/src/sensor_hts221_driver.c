@@ -33,7 +33,8 @@ static bool hts221_enabled = false;
 static K_SEM_DEFINE(hts221_data_ready_sem, 0, 1);
 
 /* Data ready trigger callback */
-static void hts221_data_ready_handler(const struct device *dev, const struct sensor_trigger *trigger)
+static void hts221_data_ready_handler(const struct device *dev,
+				      const struct sensor_trigger *trigger)
 {
 	ARG_UNUSED(dev);
 	ARG_UNUSED(trigger);

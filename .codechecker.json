@@ -1,0 +1,12 @@
+{
+  "analyze": [
+    "--analyzers", "clang-tidy",
+    "--analyzer-config", "clang-tidy:take-config-from-directory=true",
+    "--keep-gcc-include-fixed",
+    "--keep-gcc-intrin",
+    "--ignore", ".codechecker.skip"
+  ],
+  "parse": [
+    "--ignore", ".codechecker.skip"
+  ]
+}

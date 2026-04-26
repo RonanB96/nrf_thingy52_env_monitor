@@ -1,0 +1,61 @@
+name: CI Build
+
+on:
+    push:
+        branches: [ main, develop ]
+        paths:
+            - ".github/workflows/**"
+            - "app/**"
+            - ".github/workflows/ci-build.yml"
+    pull_request:
+        branches: [ main, develop ]
+        paths:
+            - ".github/workflows/**"
+            - "app/**"
+            - ".github/workflows/ci-build.yml"
+
+concurrency:
+    group: ci-build-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        container:
+            image: ghcr.io/zephyrproject-rtos/ci-repo-cache:v0.27.4.20241026
+
+        defaults:
+            run:
+                shell: bash
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 1
+
+            - name: Set up Python tools
+              run: |
+                  python3 -m pip install --upgrade pip
+                  python3 -m pip install west
+
+            - name: Sync west modules (shallow)
+              run: |
+                  west config build.cmake-args "" || true
+                  west update --fetch smart --narrow --fetch-opt=--depth=1
+
+            - name: Build app
+              run: |
+                  source modules/zephyr/zephyr-env.sh
+                  export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+                  export ZEPHYR_SDK_INSTALL_DIR="$(west config zephyr.sdk-install-dir)"
+                  west build -p always app -d app/build
+
+            - name: Upload build outputs
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: app-build-artifacts
+                  path: |
+                      app/build/app/zephyr/zephyr.elf
+                      app/build/app/zephyr/zephyr.map

@@ -1,0 +1,136 @@
+name: CI Static Analysis
+
+on:
+    push:
+        branches: [ main, develop ]
+        paths:
+            - ".github/workflows/**"
+            - ".clang-format"
+            - ".checkpatch.conf"
+            - ".clang-tidy"
+            - ".codechecker.json"
+            - ".codechecker.skip"
+            - "app/**"
+            - ".github/workflows/ci-static-analysis.yml"
+    pull_request:
+        branches: [ main, develop ]
+        paths:
+            - ".github/workflows/**"
+            - ".clang-format"
+            - ".checkpatch.conf"
+            - ".clang-tidy"
+            - ".codechecker.json"
+            - ".codechecker.skip"
+            - "app/**"
+            - ".github/workflows/ci-static-analysis.yml"
+
+concurrency:
+    group: ci-static-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    format-and-lint:
+        runs-on: ubuntu-latest
+        container:
+            image: ghcr.io/zephyrproject-rtos/ci-repo-cache:v0.27.4.20241026
+
+        defaults:
+            run:
+                shell: bash
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Show tool versions
+              run: |
+                  clang-format --version
+                  perl --version | head -n 2
+
+            - name: Check C formatting
+              run: |
+                  mapfile -t files < <(find app/src app/include app/tests/src -type f \( -name '*.c' -o -name '*.h' \))
+                  if [[ ${#files[@]} -eq 0 ]]; then
+                    echo "No C sources found"
+                    exit 0
+                  fi
+                  clang-format --dry-run --Werror "${files[@]}"
+
+            - name: Run checkpatch on changed range
+              run: |
+                  if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+                    git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+                    range="origin/${{ github.base_ref }}...HEAD"
+                  else
+                    if git rev-parse HEAD~1 >/dev/null 2>&1; then
+                      range="HEAD~1...HEAD"
+                    else
+                      echo "Single-commit branch detected, skipping checkpatch range check"
+                      exit 0
+                    fi
+                  fi
+
+                  perl modules/zephyr/scripts/checkpatch.pl \
+                    --git "$range" \
+                    --show-types \
+                    --strict \
+                    --max-line-length=100
+
+            - name: Lint workflow YAML
+              run: |
+                  python3 -m pip install --upgrade pip
+                  python3 -m pip install yamllint
+                  yamllint -d "{extends: default, rules: {line-length: disable, truthy: disable, document-start: disable}}" .github/workflows
+
+            - name: Lint workflow logic
+              uses: reviewdog/action-actionlint@v1
+              with:
+                  fail_level: error
+
+    codechecker:
+        runs-on: ubuntu-latest
+        container:
+            image: ghcr.io/zephyrproject-rtos/ci-repo-cache:v0.27.4.20241026
+
+        defaults:
+            run:
+                shell: bash
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 1
+
+            - name: Set up Python tools
+              run: |
+                  python3 -m pip install --upgrade pip
+                  python3 -m pip install west codechecker
+
+            - name: Sync west modules (shallow)
+              run: |
+                  west config build.cmake-args "" || true
+                  west update --fetch smart --narrow --fetch-opt=--depth=1
+
+            - name: Build app for compile_commands.json
+              run: |
+                  source modules/zephyr/zephyr-env.sh
+                  export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+                  export ZEPHYR_SDK_INSTALL_DIR="$(west config zephyr.sdk-install-dir)"
+                  west build -p always app -d app/build
+
+            - name: Run CodeChecker
+              run: |
+                  CodeChecker analyze -o .codechecker_reports \
+                    --config .codechecker.json \
+                    app/build/app/compile_commands.json
+                  CodeChecker parse --config .codechecker.json .codechecker_reports
+
+            - name: Upload CodeChecker reports
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: codechecker-reports
+                  path: .codechecker_reports
