@@ -274,7 +274,7 @@ static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 	/* Trigger fresh sensor reading based on which characteristic is being read */
 	if (value_ptr == &temperature_sensor.value || value_ptr == &humidity_sensor.value) {
 		/* Temperature or Humidity - trigger fresh temp/humidity sensor update */
-		int ret = sensor_manager_update_selective(SENSOR_TEMPERATURE | SENSOR_HUMIDITY);
+		int ret = sensor_manager_update_selective(SENSOR_TEMP_HUMIDITY);
 		if (ret == 0) {
 			/* Get fresh data and update local values using centralized conversion */
 			float temp = sensor_manager_get_temperature();

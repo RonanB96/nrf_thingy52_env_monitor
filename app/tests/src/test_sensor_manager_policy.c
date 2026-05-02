@@ -94,8 +94,8 @@ ZTEST(sensor_manager_aq_divisor, test_even_cycles_read_aq)
 {
 	/* All even cycles should include AQ */
 	for (uint32_t cycle = 2; cycle <= 10; cycle += 2) {
-		zassert_true(should_read_aq(cycle, TEST_AQ_DIVISOR_TWO), "Even cycle %u must read AQ",
-			     cycle);
+		zassert_true(should_read_aq(cycle, TEST_AQ_DIVISOR_TWO),
+			     "Even cycle %u must read AQ", cycle);
 	}
 }
 

@@ -38,20 +38,30 @@ jobs:
               with:
                   fetch-depth: 1
 
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.12'
+
             - name: Set up Python tools
               run: |
-                  python3 -m pip install --upgrade pip
-                  python3 -m pip install west
+                  pip install west
 
             - name: Reset west workspace metadata
               run: |
                   rm -rf .west
 
+            - name: Install missing tools (act slim image only)
+              if: ${{ env.ACT }}
+              run: |
+                  sudo apt-get update -y -q
+                  sudo apt-get install -y -q --no-install-recommends cmake ninja-build
+
             - name: Setup Zephyr project
               uses: zephyrproject-rtos/action-zephyr-setup@v1
               with:
                   app-path: app
-                  toolchains: host
+                  toolchains: arm-zephyr-eabi
 
             - name: Sync west modules (shallow)
               run: |
@@ -66,15 +76,15 @@ jobs:
 
             - name: Run tests
               run: |
-                  ./app/tests/build/zephyr/zephyr.exe > test_output.log 2>&1
+                  ./app/tests/build/tests/zephyr/zephyr.exe > test_output.log 2>&1
                   cat test_output.log
                   grep -q "PROJECT EXECUTION SUCCESSFUL" test_output.log
 
             - name: Upload test outputs
-              if: always()
+              if: always() && !env.ACT
               uses: actions/upload-artifact@v4
               with:
                   name: unit-test-results
                   path: |
-                      app/tests/build/zephyr/zephyr.elf
+                      app/tests/build/tests/zephyr/zephyr.elf
                       test_output.log

@@ -5,6 +5,10 @@ applyTo: CMakeLists.txt,Kconfig.*,prj.conf,*.conf,west.yml,*.cmake
 ---
 # Build and Configuration Rules
 
+- Before any local `west build`, verify `west config zephyr.sdk-install-dir` is set. If blank,
+  locate the SDK with `find /home -maxdepth 8 -name "arm-zephyr-eabi" -type d 2>/dev/null` and
+  set it: `west config --local zephyr.sdk-install-dir <path-to-sdk-root>`.
+  Activate the venv and source `env.sh` before building.
 - Keep configuration changes narrowly scoped to the requested board or feature.
 - Use board-level .conf files only for board-specific differences; put shared behaviour in base project config (for example, `prj.conf`) or shared Kconfig.
 - Preserve compatibility with the repository's existing west workspace and nRF Connect SDK setup.

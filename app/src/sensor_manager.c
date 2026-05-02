@@ -57,12 +57,9 @@ static void sensor_work_handler(struct k_work *work)
 
 	aq_cycle++;
 	if (aq_cycle % CONFIG_SENSOR_AIR_QUALITY_DIVISOR == 0) {
-		sensor_manager_update_selective(SENSOR_TEMPERATURE | SENSOR_HUMIDITY |
-						SENSOR_PRESSURE | SENSOR_BATTERY |
-						SENSOR_AIR_QUALITY);
+		sensor_manager_update_selective(SENSOR_ENV_FULL);
 	} else {
-		sensor_manager_update_selective(SENSOR_TEMPERATURE | SENSOR_HUMIDITY |
-						SENSOR_PRESSURE | SENSOR_BATTERY);
+		sensor_manager_update_selective(SENSOR_ENV_BASIC);
 	}
 
 	if (ccs811_driver_baseline_save_due()) {

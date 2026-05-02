@@ -32,14 +32,24 @@ jobs:
               with:
                   fetch-depth: 1
 
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.12'
+
             - name: Set up Python tools
               run: |
-                  python3 -m pip install --upgrade pip
-                  python3 -m pip install west
+                  pip install west codechecker
 
             - name: Reset west workspace metadata
               run: |
                   rm -rf .west
+
+            - name: Install missing tools (act slim image only)
+              if: ${{ env.ACT }}
+              run: |
+                  sudo apt-get update -y -q
+                  sudo apt-get install -y -q --no-install-recommends cmake ninja-build clang-tidy
 
             - name: Setup Zephyr project
               uses: zephyrproject-rtos/action-zephyr-setup@v1
@@ -60,13 +70,27 @@ jobs:
                   if [[ -n "$sdk_dir" ]]; then
                       export ZEPHYR_SDK_INSTALL_DIR="$sdk_dir"
                   fi
-                  west build -p always app -d app/build
+                  west build -p always app -d app/build --board thingy52/nrf52832
+
+            - name: Run CodeChecker
+              run: |
+                  CodeChecker analyze -o .codechecker_reports \
+                    --config .codechecker.json \
+                    app/build/app/compile_commands.json
+                  CodeChecker parse --config .codechecker.json .codechecker_reports
 
             - name: Upload build outputs
-              if: always()
+              if: always() && !env.ACT
               uses: actions/upload-artifact@v4
               with:
                   name: app-build-artifacts
                   path: |
                       app/build/app/zephyr/zephyr.elf
                       app/build/app/zephyr/zephyr.map
+
+            - name: Upload CodeChecker reports
+              if: always() && !env.ACT
+              uses: actions/upload-artifact@v4
+              with:
+                  name: codechecker-reports
+                  path: .codechecker_reports

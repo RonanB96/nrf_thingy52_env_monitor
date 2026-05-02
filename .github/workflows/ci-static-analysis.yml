@@ -42,6 +42,11 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.12'
+
             - name: Show tool versions
               run: |
                   clang-format --version
@@ -78,8 +83,7 @@ jobs:
 
             - name: Lint workflow YAML
               run: |
-                  python3 -m pip install --upgrade pip
-                  python3 -m pip install yamllint
+                  pip install yamllint
                   yamllint -d "{extends: default, rules: {line-length: disable, truthy: disable, document-start: disable}}" .github/workflows
 
             - name: Lint workflow logic
@@ -87,59 +91,3 @@ jobs:
               with:
                   fail_level: error
 
-    codechecker:
-        runs-on: ubuntu-latest
-
-        defaults:
-            run:
-                shell: bash
-
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 1
-
-            - name: Set up Python tools
-              run: |
-                  python3 -m pip install --upgrade pip
-                  python3 -m pip install west codechecker
-
-            - name: Reset west workspace metadata
-              run: |
-                  rm -rf .west
-
-            - name: Setup Zephyr project
-              uses: zephyrproject-rtos/action-zephyr-setup@v1
-              with:
-                  app-path: app
-                  toolchains: arm-zephyr-eabi
-
-            - name: Sync west modules (shallow)
-              run: |
-                  west config build.cmake-args "" || true
-                  west update --fetch smart --narrow --fetch-opt=--depth=1
-
-            - name: Build app for compile_commands.json
-              run: |
-                  source modules/zephyr/zephyr-env.sh
-                  export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
-                  sdk_dir="$(west config zephyr.sdk-install-dir 2>/dev/null || true)"
-                  if [[ -n "$sdk_dir" ]]; then
-                    export ZEPHYR_SDK_INSTALL_DIR="$sdk_dir"
-                  fi
-                  west build -p always app -d app/build
-
-            - name: Run CodeChecker
-              run: |
-                  CodeChecker analyze -o .codechecker_reports \
-                    --config .codechecker.json \
-                    app/build/app/compile_commands.json
-                  CodeChecker parse --config .codechecker.json .codechecker_reports
-
-            - name: Upload CodeChecker reports
-              if: always()
-              uses: actions/upload-artifact@v4
-              with:
-                  name: codechecker-reports
-                  path: .codechecker_reports
