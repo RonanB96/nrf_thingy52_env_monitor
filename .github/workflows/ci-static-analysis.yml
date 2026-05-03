@@ -28,6 +28,9 @@ concurrency:
     group: ci-static-${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
     format-and-lint:
         runs-on: ubuntu-latest
