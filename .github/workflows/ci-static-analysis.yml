@@ -67,6 +67,6 @@ jobs:
                   yamllint -d "{extends: default, rules: {line-length: disable, truthy: disable, document-start: disable}}" .github/workflows
 
             - name: Lint workflow logic
-              uses: reviewdog/action-actionlint@v1
-              with:
-                  fail_level: error
+              run: |
+                  bash <(curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1>/dev/null
+                  ./actionlint -color .github/workflows/*.yml
