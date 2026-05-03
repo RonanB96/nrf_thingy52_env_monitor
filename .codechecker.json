@@ -1,6 +1,6 @@
 {
   "analyze": [
-    "--analyzers", "clang-tidy",
+    "--analyzers", "clangsa", "clang-tidy",
     "--analyzer-config", "clang-tidy:take-config-from-directory=true",
     "--keep-gcc-include-fixed",
     "--keep-gcc-intrin",

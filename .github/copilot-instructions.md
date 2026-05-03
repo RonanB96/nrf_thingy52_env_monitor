@@ -23,3 +23,4 @@
 ## Detailed Rules
 
 - Use targeted files under `.github/instructions/` for language-specific and subsystem-specific rules.
+- User documentation in README.md and DEVELOPER.md

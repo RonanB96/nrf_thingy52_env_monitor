@@ -24,12 +24,14 @@ LOG_MODULE_REGISTER(uptime_service, CONFIG_LOG_DEFAULT_LEVEL);
 static bool uptime_service_initialized = false;
 static uint64_t current_uptime_seconds = 0;
 
+static const uint64_t MS_PER_SEC = 1000ULL; /* Milliseconds per second */
+
 /* GATT read callback for uptime characteristic */
 static ssize_t read_uptime(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 			   uint16_t len, uint16_t offset)
 {
 	/* Update uptime before reading */
-	current_uptime_seconds = k_uptime_get() / 1000;
+	current_uptime_seconds = k_uptime_get() / MS_PER_SEC;
 
 	/* Convert to little-endian for BLE transmission */
 	uint64_t uptime_le = sys_cpu_to_le64(current_uptime_seconds);
@@ -59,7 +61,7 @@ int uptime_service_init(void)
 	uptime_service_initialized = true;
 
 	/* Initialize uptime value */
-	current_uptime_seconds = k_uptime_get() / 1000;
+	current_uptime_seconds = k_uptime_get() / MS_PER_SEC;
 
 	LOG_INF("Uptime Service initialized (Current uptime: %llu seconds)",
 		current_uptime_seconds);
@@ -74,7 +76,7 @@ int uptime_service_update(void)
 		return -ENODEV;
 	}
 
-	current_uptime_seconds = k_uptime_get() / 1000;
+	current_uptime_seconds = k_uptime_get() / MS_PER_SEC;
 
 	LOG_DBG("Uptime updated: %llu seconds", current_uptime_seconds);
 
@@ -91,5 +93,5 @@ uint64_t uptime_service_get_uptime_seconds(void)
 	 *
 	 * For long-running uptime in seconds, current approach is optimal
 	 */
-	return k_uptime_get() / 1000;
+	return k_uptime_get() / MS_PER_SEC;
 }

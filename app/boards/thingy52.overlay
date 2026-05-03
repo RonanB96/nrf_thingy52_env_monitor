@@ -32,6 +32,44 @@
 /* Configure GPIO0 for SX1509B reset control */
 &gpio0 {
 	status = "okay";
+	/*
+	 * gpio-line-names: one entry per pin, empty string means no named owner.
+	 * Names are taken from the DT node labels that reference each pin so this
+	 * file remains the single source of truth consumed by board.c debug output.
+	 */
+	gpio-line-names =
+		"xl1",         /* P0.00  XL1  (32 kHz crystal)               */
+		"xl2",         /* P0.01  XL2  (32 kHz crystal)               */
+		"uart0-rx",    /* P0.02  uart0 pinctrl RX                    */
+		"uart0-tx",    /* P0.03  uart0 pinctrl TX                    */
+		"ain2-vbatt",  /* P0.04  AIN2 (vbatt ADC)                    */
+		"sx-oscio",    /* P0.05  SX_OSCIO (I/O expander oscillator)  */
+		"mpu-int",     /* P0.06  MPU_INT (motion sensor interrupt)    */
+		"i2c0-sda",    /* P0.07  i2c0 pinctrl SDA (sensors)          */
+		"i2c0-scl",    /* P0.08  i2c0 pinctrl SCL (sensors)          */
+		"nfc1",        /* P0.09  NFC1 (antenna, NFC disabled)        */
+		"nfc2",        /* P0.10  NFC2 (antenna, NFC disabled)        */
+		"button0",     /* P0.11  button0 gpios                       */
+		"lis2dh12-irq",/* P0.12  lis2dh12 irq-gpios                  */
+		"usb-detect",  /* P0.13  USB detect signal                   */
+		"i2c1-sda",    /* P0.14  i2c1 pinctrl SDA (ext sensors)      */
+		"i2c1-scl",    /* P0.15  i2c1 pinctrl SCL (ext sensors)      */
+		"sx1509b-rst", /* P0.16  SX1509B hardware reset              */
+		"charge-status",/* P0.17 charge_status gpios                 */
+		"mos1",        /* P0.18  MOS_1 (N-MOSFET gate)               */
+		"mos2",        /* P0.19  MOS_2 (N-MOSFET gate)               */
+		"mos3",        /* P0.20  MOS_3 (N-MOSFET gate)               */
+		"mos4",        /* P0.21  MOS_4 (N-MOSFET gate)               */
+		"ccs811-irq",  /* P0.22  ccs811 irq-gpios                    */
+		"lps22hb-int", /* P0.23  lps22hb interrupt                   */
+		"hts221-drdy", /* P0.24  hts221 drdy-gpios                   */
+		"mic-dout",    /* P0.25  MIC_DOUT (PDM data, disabled)       */
+		"mic-clk",     /* P0.26  MIC_CLK  (PDM clock, disabled)      */
+		"speaker",     /* P0.27  SPEAKER  (PWM, disabled)            */
+		"battery-adc", /* P0.28  Battery monitoring (ADC AIN4)       */
+		"spk-pwr",     /* P0.29  spk_pwr enable-gpios                */
+		"vdd-pwr",     /* P0.30  vdd_pwr enable-gpios                */
+		"bh-int";      /* P0.31  BH_INT (colour sensor interrupt)    */
 };
 
 /* Ensure battery voltage monitoring is enabled */

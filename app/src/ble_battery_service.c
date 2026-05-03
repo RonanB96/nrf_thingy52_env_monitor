@@ -19,6 +19,15 @@
 
 LOG_MODULE_REGISTER(ble_battery_service, CONFIG_LOG_DEFAULT_LEVEL);
 
+static const uint8_t BATTERY_GOOD_THRESHOLD = 75U;
+static const uint8_t BATTERY_LOW_THRESHOLD = 25U;
+static const uint8_t BATTERY_CRITICAL_THRESHOLD = 10U;
+static const uint8_t BLE_BAS_INIT_RETRY_MAX = 3U;
+static const uint32_t BLE_BAS_RETRY_DELAY_MS = 50U;
+static const uint32_t BLE_STACK_READY_DELAY_MS = 100U;
+static const uint8_t BATTERY_DEFAULT_LEVEL = 50U; /* Safe default when hardware not ready */
+static const uint8_t BATTERY_LEVEL_MAX = 100U;
+
 /* BLE Battery service state */
 static struct {
 	uint8_t level; /* Battery level percentage (0-100) */
@@ -41,9 +50,9 @@ static struct {
 static void update_charge_level(uint8_t level)
 {
 	/* Update charge level based on battery percentage */
-	if (level > 75) {
+	if (level > BATTERY_GOOD_THRESHOLD) {
 		ble_battery_state.charge_level = BT_BAS_BLS_CHARGE_LEVEL_GOOD;
-	} else if (level > 25) {
+	} else if (level > BATTERY_LOW_THRESHOLD) {
 		ble_battery_state.charge_level = BT_BAS_BLS_CHARGE_LEVEL_LOW;
 	} else {
 		ble_battery_state.charge_level = BT_BAS_BLS_CHARGE_LEVEL_CRITICAL;
@@ -56,7 +65,7 @@ static void update_charge_state(bool charging)
 		ble_battery_state.charge_state = BT_BAS_BLS_CHARGE_STATE_CHARGING;
 		ble_battery_state.wired_power = BT_BAS_BLS_WIRED_POWER_CONNECTED;
 	} else {
-		if (ble_battery_state.level > 10) {
+		if (ble_battery_state.level > BATTERY_CRITICAL_THRESHOLD) {
 			ble_battery_state.charge_state = BT_BAS_BLS_CHARGE_STATE_DISCHARGING_ACTIVE;
 		} else {
 			ble_battery_state.charge_state =
@@ -84,7 +93,7 @@ int ble_battery_service_init(void)
 	LOG_INF("Initializing BLE Battery Service");
 
 	/* Wait a bit for Bluetooth stack to be fully ready */
-	k_msleep(100);
+	k_msleep((int32_t)BLE_STACK_READY_DELAY_MS);
 
 	/* Initialize battery service with default values */
 	bt_bas_bls_set_battery_present(ble_battery_state.present);
@@ -96,14 +105,16 @@ int ble_battery_service_init(void)
 	bt_bas_bls_set_charging_fault_reason(BT_BAS_BLS_FAULT_REASON_NONE);
 
 	/* Try to get initial battery level from hardware */
-	uint8_t initial_level = battery_service_get_level();
+	int bat_level_result = battery_service_get_level();
 	bool initial_charging = battery_service_is_charging();
+	uint8_t initial_level;
 
-	/* If hardware returns 0, it might not be ready yet - use safe defaults */
-	if (initial_level == 0) {
+	if (bat_level_result < 0) {
 		LOG_WRN("Hardware battery service not ready, using default values");
-		initial_level = 50; /* Safe default */
+		initial_level = BATTERY_DEFAULT_LEVEL; /* Safe default */
 		initial_charging = false;
+	} else {
+		initial_level = (uint8_t)bat_level_result;
 	}
 
 	/* Set initial state */
@@ -114,13 +125,13 @@ int ble_battery_service_init(void)
 
 	/* Set initial battery level in BAS with retry */
 	int ret;
-	for (int retry = 0; retry < 3; retry++) {
+	for (int retry = 0; retry < BLE_BAS_INIT_RETRY_MAX; retry++) {
 		ret = bt_bas_set_battery_level(initial_level);
 		if (ret == 0) {
 			break; /* Success */
 		}
 		LOG_WRN("Failed to set battery level (attempt %d/3): %d", retry + 1, ret);
-		k_msleep(50); /* Wait and retry */
+		k_msleep((int32_t)BLE_BAS_RETRY_DELAY_MS); /* Wait and retry */
 	}
 
 	if (ret) {
@@ -152,10 +163,14 @@ int ble_battery_service_update(void)
 	}
 
 	/* Get current values from hardware */
-	uint8_t level = battery_service_get_level();
+	int bat_level = battery_service_get_level();
+	if (bat_level < 0) {
+		LOG_WRN("Battery read failed: %d", bat_level);
+		return bat_level;
+	}
 	bool charging = battery_service_is_charging();
 
-	return ble_battery_service_update_manual(level, charging);
+	return ble_battery_service_update_manual((uint8_t)bat_level, charging);
 }
 
 int ble_battery_service_update_manual(uint8_t level, bool charging)
@@ -166,9 +181,9 @@ int ble_battery_service_update_manual(uint8_t level, bool charging)
 	}
 
 	/* Validate battery level */
-	if (level > 100) {
+	if (level > BATTERY_LEVEL_MAX) {
 		LOG_WRN("Invalid battery level %d, clamping to 100", level);
-		level = 100;
+		level = BATTERY_LEVEL_MAX;
 	}
 
 	/* Check if values have changed */

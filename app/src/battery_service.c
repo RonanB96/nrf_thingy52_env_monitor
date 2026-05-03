@@ -33,15 +33,18 @@ static const struct device *voltage_dev = DEVICE_DT_GET(VBATT_NODE);
 static const struct gpio_dt_spec charge_status_gpio = GPIO_DT_SPEC_GET(CHARGE_STATUS_NODE, gpios);
 #endif
 
-#define BATTERY_VOLTAGE_FULL_MV  4200 /* Typical LiPo full voltage */
-#define BATTERY_VOLTAGE_EMPTY_MV 3000 /* Typical LiPo empty voltage */
+static const uint32_t BATTERY_VOLTAGE_FULL_MV = 4200U;
+static const uint32_t BATTERY_VOLTAGE_EMPTY_MV = 3000U;
+static const uint8_t BATTERY_PERCENTAGE_MAX = 100U;
+static const uint8_t BATTERY_DEFAULT_PERCENT = 50U;
+static const double VOLTAGE_V_TO_MV = 1000.0;
 
 /* Battery monitoring data */
 struct battery_data {
 	uint8_t last_level;
 	bool initialized;
 	bool last_charging_state; /* Track last charging state for interrupt logging */
-	void (*charging_changed_cb)(bool charging); /* Callback for charging status changes */
+	battery_charging_cb_t charging_changed_cb;
 };
 
 static struct battery_data bat_data;
@@ -53,7 +56,7 @@ static K_MUTEX_DEFINE(battery_mutex);
 static struct gpio_callback charge_cb_data;
 
 /* Debouncing for charging status interrupt */
-#define CHARGE_STATUS_DEBOUNCE_MS 300 /* 300ms debounce time */
+static const uint32_t CHARGE_STATUS_DEBOUNCE_MS = 300U;
 static struct k_work_delayable charge_debounce_work;
 
 /* ADC calibration function for battery measurement */
@@ -135,13 +138,13 @@ static uint8_t voltage_to_percentage(uint32_t voltage_mv)
 	LOG_DBG("Battery voltage: %d mV", voltage_mv);
 
 	if (voltage_mv >= BATTERY_VOLTAGE_FULL_MV) {
-		return 100;
+		return BATTERY_PERCENTAGE_MAX;
 	} else if (voltage_mv <= BATTERY_VOLTAGE_EMPTY_MV) {
 		return 0;
 	}
 
 	/* Linear interpolation between empty and full voltage */
-	return (uint8_t)((voltage_mv - BATTERY_VOLTAGE_EMPTY_MV) * 100 /
+	return (uint8_t)((voltage_mv - BATTERY_VOLTAGE_EMPTY_MV) * BATTERY_PERCENTAGE_MAX /
 			 (BATTERY_VOLTAGE_FULL_MV - BATTERY_VOLTAGE_EMPTY_MV));
 }
 
@@ -194,18 +197,19 @@ static int battery_sample(void)
 	ret = sensor_sample_fetch(voltage_dev);
 	if (ret != 0) {
 		LOG_ERR("Failed to fetch voltage sensor data: %d", ret);
-		goto cleanup;
+		return ret;
 	}
 
 	/* Get voltage reading */
 	ret = sensor_channel_get(voltage_dev, SENSOR_CHAN_VOLTAGE, &voltage);
 	if (ret != 0) {
 		LOG_ERR("Failed to get voltage channel: %d", ret);
-		goto cleanup;
+		return ret;
 	}
 
 	/* Convert to millivolts */
-	uint32_t battery_voltage_mv = (uint32_t)(sensor_value_to_double(&voltage) * 1000.0);
+	uint32_t battery_voltage_mv =
+		(uint32_t)(sensor_value_to_double(&voltage) * VOLTAGE_V_TO_MV);
 
 	uint8_t percentage = voltage_to_percentage(battery_voltage_mv);
 
@@ -215,12 +219,11 @@ static int battery_sample(void)
 	is_charging = gpio_pin_get_dt(&charge_status_gpio) == 0; /* Active low */
 #endif
 
-	printk("Battery: %d mV -> %d%% %s\n", battery_voltage_mv, percentage,
-	       is_charging ? "(Charging)" : "");
+	LOG_INF("Battery: %d mV -> %d%% %s", battery_voltage_mv, percentage,
+		is_charging ? "(Charging)" : "");
 
 	bat_data.last_level = percentage;
 
-cleanup:
 	return ret;
 }
 
@@ -282,22 +285,22 @@ int battery_service_init(void)
 	if (ret != 0) {
 		LOG_WRN("Initial battery measurement failed (%d), will retry later", ret);
 		/* Set a reasonable default instead of 0 */
-		bat_data.last_level = 50;
+		bat_data.last_level = BATTERY_DEFAULT_PERCENT;
 	}
 
 	LOG_INF("Battery service initialized successfully");
 	return 0;
 }
 
-uint8_t battery_service_get_level(void)
+int battery_service_get_level(void)
 {
 	int err = battery_sample();
 	if (err != 0) {
 		LOG_ERR("Battery service failed to read a sample! %d", err);
-		return 50; /* Return a reasonable default */
+		return err;
 	}
 
-	return bat_data.last_level;
+	return (int)bat_data.last_level;
 }
 
 int battery_service_sample(void)
@@ -333,7 +336,7 @@ bool battery_service_is_charging(void)
 #endif
 }
 
-void battery_service_register_charging_callback(void (*callback)(bool charging))
+void battery_service_register_charging_callback(battery_charging_cb_t callback)
 {
 	bat_data.charging_changed_cb = callback;
 }
@@ -346,9 +349,9 @@ int battery_service_init(void)
 	return -ENOTSUP;
 }
 
-uint8_t battery_service_get_level(void)
+int battery_service_get_level(void)
 {
-	return 0;
+	return -ENOTSUP;
 }
 
 #endif /* DT_NODE_HAS_STATUS(VBATT_NODE, okay) */

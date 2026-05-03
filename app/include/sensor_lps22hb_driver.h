@@ -50,10 +50,10 @@ int lps22hb_driver_trigger_oneshot(void);
  *
  * Waits for the data ready interrupt using a semaphore.
  *
- * @param timeout_ms Maximum time to wait in milliseconds
+ * @param timeout Maximum time to wait as k_timeout_t (e.g. K_MSEC(100))
  * @return 0 on success, -ETIMEDOUT on timeout, other negative error codes
  */
-int lps22hb_driver_wait_data_ready(int timeout_ms);
+int lps22hb_driver_wait_data_ready(k_timeout_t timeout);
 
 /**
  * @brief Power off LPS22HB sensor to save power

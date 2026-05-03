@@ -21,6 +21,10 @@
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
+static const uint32_t BOARD_INIT_DELAY_MS = 500U;     /* Allow GPIO hog driver to initialize */
+static const uint32_t MS_PER_SEC = 1000U;             /* Milliseconds per second */
+static const uint32_t BT_STACK_READY_DELAY_MS = 100U; /* Delay waiting for BT stack ready */
+
 int main(void)
 {
 	int ret;
@@ -30,7 +34,7 @@ int main(void)
 	LOG_INF("Starting BLE Environmental Monitor");
 
 	/* Allow GPIO hog driver to complete initialization */
-	k_msleep(500);
+	k_msleep((int32_t)BOARD_INIT_DELAY_MS);
 
 	/* Initialize device naming service first */
 	LOG_DBG("Initializing device naming service");
@@ -90,7 +94,7 @@ int main(void)
 	LOG_INF("Environmental Sensing Service initialized");
 
 	/* Start periodic sensor readings */
-	sensor_manager_start_periodic(CONFIG_SENSOR_ENV_INTERVAL_SEC * 1000U);
+	sensor_manager_start_periodic(CONFIG_SENSOR_ENV_INTERVAL_SEC * MS_PER_SEC);
 	LOG_INF("Periodic sensor updates started");
 
 	/* Initialize Uptime Service */
@@ -114,7 +118,7 @@ int main(void)
 
 	/* Small delay to ensure Bluetooth stack is ready */
 	LOG_DBG("Waiting for Bluetooth stack to be ready");
-	k_msleep(100);
+	k_msleep((int32_t)BT_STACK_READY_DELAY_MS);
 
 	LOG_DBG("Starting BLE advertising");
 	ret = ble_advertiser_start(&ble_data);

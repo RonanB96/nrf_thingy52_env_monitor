@@ -62,7 +62,7 @@ external
 
 modules
 twister-out*/
-.codechecker/
+.codechecker*/
 .serena/
 reports/
 .tmp

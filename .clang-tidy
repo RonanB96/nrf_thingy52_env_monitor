@@ -18,7 +18,23 @@ Checks: >
   -performance-no-int-to-ptr,
   portability-*,
   readability-braces-around-statements,
-  readability-redundant-control-flow
+  readability-redundant-control-flow,
+  readability-magic-numbers,
+  readability-non-const-parameter,
+  readability-isolate-declaration,
+  cert-dcl03-c,
+  cert-dcl16-c,
+  cert-err33-c,
+  cert-flp30-c,
+  cert-str34-c
+
+# Magic-number exceptions: 0 and 1 are universally unambiguous; negative values are
+# sign sentinels; Zephyr error codes and BLE UUIDs are defined upstream.
+CheckOptions:
+  - key: readability-magic-numbers.IgnoredIntegerValues
+    value: '0;1'
+  - key: readability-magic-numbers.IgnoredFloatingPointValues
+    value: '0.0;1.0'
 
 # Restrict warnings to project source only — suppress noise from SDK/Zephyr headers.
 HeaderFilterRegex: '^app/(src|include|tests/src)/.*'

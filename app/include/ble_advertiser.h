@@ -18,14 +18,17 @@ extern "C" {
  * @brief Environmental sensor advertising data
  */
 struct ble_sensor_data {
-	uint16_t temperature;  /* Temperature in 0.01°C */
-	uint16_t humidity;     /* Humidity in 0.01% */
-	uint16_t pressure;     /* Pressure in 0.1 hPa */
-	uint16_t eco2;         /* CO2 in ppm */
-	uint16_t tvoc;         /* TVOC in ppb */
-	uint8_t battery_level; /* Battery in % */
-	bool battery_charging; /* Battery charging status */
+	uint16_t temperature;     /* Temperature in 0.01°C */
+	uint16_t humidity;        /* Humidity in 0.01% */
+	uint16_t pressure;        /* Pressure in 0.1 hPa */
+	uint16_t eco2;            /* CO2 in ppm */
+	uint16_t tvoc;            /* TVOC in ppb */
+	uint8_t battery_level;    /* Battery in % */
+	uint8_t battery_charging; /* Battery charging status (0 = not charging, 1 = charging) */
 } __packed;
+
+_Static_assert(sizeof(struct ble_sensor_data) == 12U,
+	       "ble_sensor_data wire size changed — update BLE advertisement payload");
 
 /**
  * @brief Initialize BLE advertiser

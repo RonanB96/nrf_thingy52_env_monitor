@@ -21,6 +21,13 @@ LOG_MODULE_REGISTER(device_naming, CONFIG_LOG_DEFAULT_LEVEL);
 static char device_name_buffer[DEVICE_NAME_MAX_LEN];
 static bool naming_initialized = false;
 
+static const size_t DEVICE_NAME_MIN_BUF = 16U; /* Minimum buffer to fit "Thingy52-XXXXXXXX\0" */
+static const int DEVICE_ID_BYTES_USED = 4;     /* Last 4 bytes of HW ID used for unique suffix */
+static const int BITS_PER_BYTE_SHIFT = 8;      /* Bit shift per byte (== CHAR_BIT) */
+
+/* hwinfo returns up to 8 bytes of device ID on nRF52 */
+#define HWINFO_DEVICE_ID_LEN 8U
+
 /**
  * Get unique device name based on hardware ID
  *
@@ -30,11 +37,11 @@ static bool naming_initialized = false;
  */
 int device_naming_get_name(char *name_buffer, size_t buffer_size)
 {
-	uint8_t device_id[8];
+	uint8_t device_id[HWINFO_DEVICE_ID_LEN];
 	ssize_t id_len;
 	uint32_t unique_id = 0;
 
-	if (!name_buffer || buffer_size < 16) {
+	if (!name_buffer || buffer_size < DEVICE_NAME_MIN_BUF) {
 		return -EINVAL;
 	}
 
@@ -49,17 +56,17 @@ int device_naming_get_name(char *name_buffer, size_t buffer_size)
 	id_len = hwinfo_get_device_id(device_id, sizeof(device_id));
 	if (id_len <= 0) {
 		LOG_ERR("Failed to get hardware ID, using fallback");
-		snprintf(name_buffer, buffer_size, "%s-UNKNOWN", DEVICE_PREFIX);
+		(void)snprintf(name_buffer, buffer_size, "%s-UNKNOWN", DEVICE_PREFIX);
 		return -ENODEV;
 	}
 
 	/* Create unique ID from last 4 bytes */
-	for (int i = 0; i < 4 && i < id_len; i++) {
-		unique_id |= (device_id[id_len - 1 - i] << (i * 8));
+	for (int i = 0; i < DEVICE_ID_BYTES_USED && i < id_len; i++) {
+		unique_id |= (device_id[id_len - 1 - i] << (i * BITS_PER_BYTE_SHIFT));
 	}
 
 	/* Format as "Thingy52-XXXXXXXX" */
-	snprintf(name_buffer, buffer_size, "%s-%08X", DEVICE_PREFIX, unique_id);
+	(void)snprintf(name_buffer, buffer_size, "%s-%08X", DEVICE_PREFIX, unique_id);
 
 	/* Cache the result */
 	strncpy(device_name_buffer, name_buffer, sizeof(device_name_buffer) - 1);

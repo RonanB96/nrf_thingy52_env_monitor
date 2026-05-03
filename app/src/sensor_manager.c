@@ -23,13 +23,6 @@
 
 LOG_MODULE_REGISTER(sensor_manager, CONFIG_LOG_DEFAULT_LEVEL);
 
-/* CCS811 sensor validation constants */
-#define CCS811_INVALID_READING 65021 /* 0xFE0D - sensor not ready/invalid */
-#define CCS811_ECO2_MIN_PPM    400   /* Minimum valid eCO2 reading (atmospheric baseline) */
-#define CCS811_ECO2_MAX_PPM    8192  /* Maximum valid eCO2 reading per CCS811 spec */
-#define CCS811_TVOC_MIN_PPB    0     /* Minimum valid TVOC reading */
-#define CCS811_TVOC_MAX_PPB    1187  /* Maximum valid TVOC reading per CCS811 spec */
-
 /* Sensor device nodes from device tree */
 #define HTS221_NODE  DT_NODELABEL(hts221)
 #define LPS22HB_NODE DT_NODELABEL(lps22hb_press)
@@ -77,7 +70,8 @@ static void sensor_work_handler(struct k_work *work)
 
 static int read_temperature_humidity(void)
 {
-	float temperature, humidity;
+	float temperature;
+	float humidity;
 	int ret;
 
 	LOG_INF("Reading HTS221 temperature/humidity...");
@@ -89,14 +83,14 @@ static int read_temperature_humidity(void)
 			(double)humidity, ret);
 		current_data.temperature = temperature;
 		current_data.humidity = humidity;
-		current_data.temperature_valid = true;
-		current_data.humidity_valid = true;
+		current_data.valid_mask |= SENSOR_TEMPERATURE;
+		current_data.valid_mask |= SENSOR_HUMIDITY;
 		LOG_DBG("Temperature: %.2f °C, Humidity: %.2f %%", (double)temperature,
 			(double)humidity);
 	} else {
 		LOG_ERR("HTS221 read failed with ret=%d", ret);
-		current_data.temperature_valid = false;
-		current_data.humidity_valid = false;
+		current_data.valid_mask &= ~SENSOR_TEMPERATURE;
+		current_data.valid_mask &= ~SENSOR_HUMIDITY;
 		LOG_WRN("Failed to read HTS221: %d", ret);
 	}
 
@@ -112,10 +106,10 @@ static int read_pressure(void)
 	ret = lps22hb_driver_read_pressure(&pressure);
 	if (ret == 0) {
 		current_data.pressure = pressure;
-		current_data.pressure_valid = true;
+		current_data.valid_mask |= SENSOR_PRESSURE;
 		LOG_DBG("Pressure: %.2f hPa", (double)pressure);
 	} else {
-		current_data.pressure_valid = false;
+		current_data.valid_mask &= ~SENSOR_PRESSURE;
 		LOG_WRN("Failed to read LPS22HB: %d", ret);
 	}
 
@@ -124,12 +118,15 @@ static int read_pressure(void)
 
 static int read_air_quality(void)
 {
-	uint16_t co2_ppm, tvoc_ppb;
+	uint16_t co2_ppm;
+	uint16_t tvoc_ppb;
 	int ret;
 
 	/* Use temperature and humidity for environmental compensation if available */
-	float temp = current_data.temperature_valid ? current_data.temperature : NAN;
-	float humidity = current_data.humidity_valid ? current_data.humidity : NAN;
+	float temp = (current_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? current_data.temperature
+									 : NAN;
+	float humidity =
+		(current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity : NAN;
 
 	/* Use the dedicated CCS811 driver to read air quality data */
 	ret = ccs811_driver_read_air_quality(&co2_ppm, &tvoc_ppb, temp, humidity);
@@ -139,34 +136,32 @@ static int read_air_quality(void)
 		if (co2_ppm != CCS811_INVALID_READING && co2_ppm != 0 &&
 		    co2_ppm >= CCS811_ECO2_MIN_PPM && co2_ppm <= CCS811_ECO2_MAX_PPM) {
 			current_data.eco2 = co2_ppm;
-			current_data.eco2_valid = true;
+			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		} else {
-			current_data.eco2_valid = false;
+			current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 			LOG_INF("Invalid eCO2 reading: %d (0x%04x)", co2_ppm, co2_ppm);
 		}
 
 		if (tvoc_ppb != CCS811_INVALID_READING && tvoc_ppb >= CCS811_TVOC_MIN_PPB &&
 		    tvoc_ppb <= CCS811_TVOC_MAX_PPB) {
 			current_data.tvoc = tvoc_ppb;
-			current_data.tvoc_valid = true;
+			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		} else {
-			current_data.tvoc_valid = false;
+			current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 			LOG_INF("Invalid TVOC reading: %d (0x%04x)", tvoc_ppb, tvoc_ppb);
 		}
 
-		if (current_data.eco2_valid && current_data.tvoc_valid) {
+		if ((current_data.valid_mask & SENSOR_AIR_QUALITY) != 0) {
 			LOG_INF("CCS811 readings: eCO2=%d ppm, TVOC=%d ppb", current_data.eco2,
 				current_data.tvoc);
 		}
 	} else if (ret == -EAGAIN) {
 		/* Sensor still in conditioning or data not ready */
-		current_data.eco2_valid = false;
-		current_data.tvoc_valid = false;
+		current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 		LOG_DBG("CCS811 data not ready yet");
 	} else {
 		/* Other error */
-		current_data.eco2_valid = false;
-		current_data.tvoc_valid = false;
+		current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 		LOG_WRN("Failed to read CCS811: %d", ret);
 	}
 
@@ -175,9 +170,15 @@ static int read_air_quality(void)
 
 static int read_battery(void)
 {
-	current_data.battery_level = battery_service_get_level();
+	int bat_level = battery_service_get_level();
+	if (bat_level >= 0) {
+		current_data.battery_level = (uint8_t)bat_level;
+		current_data.valid_mask |= SENSOR_BATTERY;
+	} else {
+		current_data.valid_mask &= ~SENSOR_BATTERY;
+		LOG_WRN("Battery read failed: %d", bat_level);
+	}
 	current_data.battery_charging = battery_service_is_charging();
-	current_data.battery_valid = true;
 	LOG_DBG("Battery: %d%% %s", current_data.battery_level,
 		current_data.battery_charging ? "(Charging)" : "");
 	return 0;
@@ -309,21 +310,25 @@ int sensor_manager_update(void)
 	read_air_quality();
 	read_battery();
 
+	/* Read callback pointer under lock, call after release to avoid deadlock */
+	sensor_update_callback_t local_cb = update_callback;
 	k_mutex_unlock(&sensor_manager_mutex);
 
 	LOG_INF("Sensor update: T=%.1f°C H=%.1f%% P=%.1fhPa CO2=%dppm TVOC=%dppb Bat=%d%%",
-		(double)(current_data.temperature_valid ? current_data.temperature : 0.0f),
-		(double)(current_data.humidity_valid ? current_data.humidity : 0.0f),
-		(double)(current_data.pressure_valid ? current_data.pressure : 0.0f),
-		current_data.eco2_valid ? current_data.eco2 : 0,
-		current_data.tvoc_valid ? current_data.tvoc : 0,
-		current_data.battery_valid ? current_data.battery_level : 0);
+		(double)((current_data.valid_mask & SENSOR_TEMPERATURE) != 0
+				 ? current_data.temperature
+				 : 0.0f),
+		(double)((current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity
+									  : 0.0f),
+		(double)((current_data.valid_mask & SENSOR_PRESSURE) != 0 ? current_data.pressure
+									  : 0.0f),
+		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.eco2 : 0,
+		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.tvoc : 0,
+		(current_data.valid_mask & SENSOR_BATTERY) != 0 ? current_data.battery_level : 0);
 
-	/* Notify callback if registered */
-	if (update_callback) {
-		/* Create local copy to avoid volatile qualifier issues */
+	if (local_cb) {
 		struct sensor_data local_data = *(struct sensor_data *)&current_data;
-		update_callback(&local_data);
+		local_cb(&local_data);
 	}
 
 	return 0;
@@ -362,22 +367,27 @@ int sensor_manager_update_selective(enum sensor_select sensors)
 		read_battery();
 	}
 
+	/* Read callback pointer under lock, call after release to avoid deadlock */
+	sensor_update_callback_t local_cb = update_callback;
 	k_mutex_unlock(&sensor_manager_mutex);
 
 	LOG_DBG("Selective sensor update (0x%02x): T=%.1f°C H=%.1f%% P=%.1fhPa CO2=%dppm "
 		"TVOC=%dppb Bat=%d%%",
-		sensors, (double)(current_data.temperature_valid ? current_data.temperature : 0.0f),
-		(double)(current_data.humidity_valid ? current_data.humidity : 0.0f),
-		(double)(current_data.pressure_valid ? current_data.pressure : 0.0f),
-		current_data.eco2_valid ? current_data.eco2 : 0,
-		current_data.tvoc_valid ? current_data.tvoc : 0,
-		current_data.battery_valid ? current_data.battery_level : 0);
+		sensors,
+		(double)((current_data.valid_mask & SENSOR_TEMPERATURE) != 0
+				 ? current_data.temperature
+				 : 0.0f),
+		(double)((current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity
+									  : 0.0f),
+		(double)((current_data.valid_mask & SENSOR_PRESSURE) != 0 ? current_data.pressure
+									  : 0.0f),
+		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.eco2 : 0,
+		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.tvoc : 0,
+		(current_data.valid_mask & SENSOR_BATTERY) != 0 ? current_data.battery_level : 0);
 
-	/* Notify callback if registered */
-	if (update_callback) {
-		/* Create local copy to avoid volatile qualifier issues */
+	if (local_cb) {
 		struct sensor_data local_data = *(struct sensor_data *)&current_data;
-		update_callback(&local_data);
+		local_cb(&local_data);
 	}
 
 	return 0;
@@ -416,27 +426,28 @@ bool sensor_manager_is_ccs811_ready(void)
 /* Individual sensor getters for BLE Mesh compatibility */
 float sensor_manager_get_temperature(void)
 {
-	return current_data.temperature_valid ? current_data.temperature : 0.0f;
+	return (current_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? current_data.temperature
+								   : 0.0f;
 }
 
 float sensor_manager_get_humidity(void)
 {
-	return current_data.humidity_valid ? current_data.humidity : 0.0f;
+	return (current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity : 0.0f;
 }
 
 float sensor_manager_get_pressure(void)
 {
-	return current_data.pressure_valid ? current_data.pressure : 0.0f;
+	return (current_data.valid_mask & SENSOR_PRESSURE) != 0 ? current_data.pressure : 0.0f;
 }
 
 uint16_t sensor_manager_get_eco2(void)
 {
-	return current_data.eco2_valid ? current_data.eco2 : 0;
+	return (current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.eco2 : 0;
 }
 
 uint16_t sensor_manager_get_tvoc(void)
 {
-	return current_data.tvoc_valid ? current_data.tvoc : 0;
+	return (current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.tvoc : 0;
 }
 
 void sensor_manager_update_air_quality_for_ble(void)
@@ -445,12 +456,15 @@ void sensor_manager_update_air_quality_for_ble(void)
 		return;
 	}
 
-	uint16_t co2_ppm, tvoc_ppb;
+	uint16_t co2_ppm;
+	uint16_t tvoc_ppb;
 	int ret;
 
 	/* Use temperature and humidity for environmental compensation if available */
-	float temp = current_data.temperature_valid ? current_data.temperature : NAN;
-	float humidity = current_data.humidity_valid ? current_data.humidity : NAN;
+	float temp = (current_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? current_data.temperature
+									 : NAN;
+	float humidity =
+		(current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity : NAN;
 
 	/* Use the BLE-optimized read function with cached fallback */
 	ret = ccs811_driver_read_for_ble(&co2_ppm, &tvoc_ppb, temp, humidity);
@@ -460,18 +474,19 @@ void sensor_manager_update_air_quality_for_ble(void)
 		if (co2_ppm != CCS811_INVALID_READING && co2_ppm != 0 &&
 		    co2_ppm >= CCS811_ECO2_MIN_PPM && co2_ppm <= CCS811_ECO2_MAX_PPM) {
 			current_data.eco2 = co2_ppm;
-			current_data.eco2_valid = true;
+			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		}
 
 		if (tvoc_ppb != CCS811_INVALID_READING && tvoc_ppb >= CCS811_TVOC_MIN_PPB &&
 		    tvoc_ppb <= CCS811_TVOC_MAX_PPB) {
 			current_data.tvoc = tvoc_ppb;
-			current_data.tvoc_valid = true;
+			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		}
 
 		LOG_DBG("BLE air quality update: eCO2=%d ppm, TVOC=%d ppb",
-			current_data.eco2_valid ? current_data.eco2 : 0,
-			current_data.tvoc_valid ? current_data.tvoc : 0);
+			(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.eco2 : 0,
+			(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.tvoc
+									    : 0);
 	} else {
 		LOG_DBG("BLE air quality update failed: %d (using existing cache)", ret);
 	}
@@ -479,5 +494,5 @@ void sensor_manager_update_air_quality_for_ble(void)
 
 uint8_t sensor_manager_get_battery_level(void)
 {
-	return current_data.battery_valid ? current_data.battery_level : 0;
+	return (current_data.valid_mask & SENSOR_BATTERY) != 0 ? current_data.battery_level : 0;
 }
