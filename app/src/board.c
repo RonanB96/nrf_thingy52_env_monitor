@@ -14,7 +14,7 @@
 LOG_MODULE_REGISTER(board, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* Device tree node definitions */
-#define GPIO0_NODE DT_NODELABEL(gpio0)
+#define GPIO0_NODE   DT_NODELABEL(gpio0)
 #define SX1509B_NODE DT_NODELABEL(sx1509b)
 
 /* GPIO0 hardware constants (nRF52832 specific) */
@@ -27,54 +27,85 @@ LOG_MODULE_REGISTER(board, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* SX1509B initialization values from device tree */
 #define SX1509B_INIT_OUT_HIGH DT_PROP(SX1509B_NODE, init_out_high)
-#define SX1509B_INIT_OUT_LOW DT_PROP(SX1509B_NODE, init_out_low)
-#define SX1509B_NGPIOS DT_PROP(SX1509B_NODE, ngpios)
+#define SX1509B_INIT_OUT_LOW  DT_PROP(SX1509B_NODE, init_out_low)
+#define SX1509B_NGPIOS        DT_PROP(SX1509B_NODE, ngpios)
 
 /* GPIO device references */
 static const struct device *gpio0_dev;
 static const struct device *sx1509b_dev;
 
 /* GPIO0 pin function definitions from device tree and Thingy:52 schematics */
-static const char* get_gpio0_pin_function(int pin)
+static const char *get_gpio0_pin_function(int pin)
 {
 	switch (pin) {
-	case 0: return "XL1 (32KHz XTAL)";
-	case 1: return "XL2 (32KHz XTAL)";
-	case 2: return "UART_RX";
-	case 3: return "UART_TX";
-	case 4: return "AIN2 (ANALOG)";
-	case 5: return "AIN3 (ANALOG)";
-	case 6: return "MPU_INT";
-	case 7: return "SDA";
-	case 8: return "SCL";
-	case 9: return "NFC1";
-	case 10: return "NFC2";
-	case 11: return "Button";
-	case 12: return "LIS_INT1";
-	case 13: return "USB_DETECT (I2C)";
-	case 14: return "SDA_EXT (I2C)";
-	case 15: return "SCL_EXT (I2C)";
-	case 16: return "SX1509B_RESET (OUTPUT)";
-	case 17: return "BAT_CHG_STAT (INPUT)";
-	case 18: return "MOS 1";
-	case 19: return "MOS 2";
-	case 20: return "MOS 3";
-	case 21: return "MOS 4";
-	case 22: return "CCS811_INT";
-	case 23: return "LPS22HB_INT (INPUT)";
-	case 24: return "HTS221_INT (INPUT)";
-	case 25: return "MIC_DOUT";
-	case 26: return "MIC_CLK";
-	case 27: return "SPEAKER";
-	case 28: return "Battery";
-	case 29: return "SPK PWR Ctrl";
-	case 30: return "VDD PWR Ctrl";
-	case 31: return "BH INT";
-	default: return "UNKNOWN";
+	case 0:
+		return "XL1 (32KHz XTAL)";
+	case 1:
+		return "XL2 (32KHz XTAL)";
+	case 2:
+		return "UART_RX";
+	case 3:
+		return "UART_TX";
+	case 4:
+		return "AIN2 (ANALOG)";
+	case 5:
+		return "AIN3 (ANALOG)";
+	case 6:
+		return "MPU_INT";
+	case 7:
+		return "SDA";
+	case 8:
+		return "SCL";
+	case 9:
+		return "NFC1";
+	case 10:
+		return "NFC2";
+	case 11:
+		return "Button";
+	case 12:
+		return "LIS_INT1";
+	case 13:
+		return "USB_DETECT (I2C)";
+	case 14:
+		return "SDA_EXT (I2C)";
+	case 15:
+		return "SCL_EXT (I2C)";
+	case 16:
+		return "SX1509B_RESET (OUTPUT)";
+	case 17:
+		return "BAT_CHG_STAT (INPUT)";
+	case 18:
+		return "MOS 1";
+	case 19:
+		return "MOS 2";
+	case 20:
+		return "MOS 3";
+	case 21:
+		return "MOS 4";
+	case 22:
+		return "CCS811_INT";
+	case 23:
+		return "LPS22HB_INT (INPUT)";
+	case 24:
+		return "HTS221_INT (INPUT)";
+	case 25:
+		return "MIC_DOUT";
+	case 26:
+		return "MIC_CLK";
+	case 27:
+		return "SPEAKER";
+	case 28:
+		return "Battery";
+	case 29:
+		return "SPK PWR Ctrl";
+	case 30:
+		return "VDD PWR Ctrl";
+	case 31:
+		return "BH INT";
+	default:
+		return "UNKNOWN";
 	}
 }
-
-
 
 /* GPIO0 pins - intelligent state reading based on pin configuration */
 static void print_gpio0_pin_states(void)
@@ -96,7 +127,7 @@ static void print_gpio0_pin_states(void)
 		const char *function = get_gpio0_pin_function(pin);
 
 		bool pin_state;
-		char config_str[12];  /* Increased size for pull info */
+		char config_str[12]; /* Increased size for pull info */
 
 		if (dir == NRF_GPIO_PIN_DIR_OUTPUT) {
 			/* Output pin - read from output register */
@@ -128,12 +159,13 @@ static void print_gpio0_pin_states(void)
 					break;
 				}
 			} else {
-				LOG_WRN("P%02d | INPUT    | ERROR | %s (read failed: %d)", pin, function, zephyr_state);
+				LOG_WRN("P%02d | INPUT    | ERROR | %s (read failed: %d)", pin,
+					function, zephyr_state);
 				error_count++;
 				continue;
 			}
 		}
-		config_str[sizeof(config_str) - 1] = '\0';  /* Ensure null termination */
+		config_str[sizeof(config_str) - 1] = '\0'; /* Ensure null termination */
 
 		const char *state_str = pin_state ? "HIGH" : "LOW";
 		LOG_INF("P%02d | %-8s | %-5s | %s", pin, config_str, state_str, function);
@@ -145,40 +177,57 @@ static void print_gpio0_pin_states(void)
 		}
 	}
 
-	LOG_INF("GPIO0 Summary: %d HIGH, %d LOW, %d errors, %d total pins",
-		high_count, low_count, error_count, GPIO0_PIN_COUNT);
+	LOG_INF("GPIO0 Summary: %d HIGH, %d LOW, %d errors, %d total pins", high_count, low_count,
+		error_count, GPIO0_PIN_COUNT);
 	LOG_INF("Pull types: PULLUP=internal pull-up, PULLDN=internal pull-down, INPUT=no pull");
-}/* SX1509B pin function definitions from device tree comments */
-static const char* get_sx1509b_pin_function(int pin)
+} /* SX1509B pin function definitions from device tree comments */
+static const char *get_sx1509b_pin_function(int pin)
 {
 	switch (pin) {
-	case 0: return "IOEXT_0";
-	case 1: return "IOEXT_1";
-	case 2: return "IOEXT_2";
-	case 3: return "IOEXT_3";
-	case 4: return "BAT_MON_EN (OUTPUT)";
-	case 5: return "LIGHTWELL_G (OUTPUT_ACTIVE_LOW)";
-	case 6: return "LIGHTWELL_B (OUTPUT_ACTIVE_LOW)";
-	case 7: return "LIGHTWELL_R (OUTPUT_ACTIVE_LOW)";
-	case 8: return "MPU_PWR_CTRL (OUTPUT)";
-	case 9: return "MIC_PWR_CTRL (OUTPUT)";
-	case 10: return "CCS_PWR_CTRL (OUTPUT)";
-	case 11: return "CCS_RESET (OUTPUT)";
-	case 12: return "CCS_WAKE (OUTPUT)";
-	case 13: return "SENSE_LED_R (OUTPUT)";
-	case 14: return "SENSE_LED_G (OUTPUT)";
-	case 15: return "SENSE_LED_B (OUTPUT)";
-	default: return "UNKNOWN";
+	case 0:
+		return "IOEXT_0";
+	case 1:
+		return "IOEXT_1";
+	case 2:
+		return "IOEXT_2";
+	case 3:
+		return "IOEXT_3";
+	case 4:
+		return "BAT_MON_EN (OUTPUT)";
+	case 5:
+		return "LIGHTWELL_G (OUTPUT_ACTIVE_LOW)";
+	case 6:
+		return "LIGHTWELL_B (OUTPUT_ACTIVE_LOW)";
+	case 7:
+		return "LIGHTWELL_R (OUTPUT_ACTIVE_LOW)";
+	case 8:
+		return "MPU_PWR_CTRL (OUTPUT)";
+	case 9:
+		return "MIC_PWR_CTRL (OUTPUT)";
+	case 10:
+		return "CCS_PWR_CTRL (OUTPUT)";
+	case 11:
+		return "CCS_RESET (OUTPUT)";
+	case 12:
+		return "CCS_WAKE (OUTPUT)";
+	case 13:
+		return "SENSE_LED_R (OUTPUT)";
+	case 14:
+		return "SENSE_LED_G (OUTPUT)";
+	case 15:
+		return "SENSE_LED_B (OUTPUT)";
+	default:
+		return "UNKNOWN";
 	}
 }
 
 /* Helper function to build pin list string from bitmask */
 static void build_pin_list_string(uint16_t mask, char *buffer, size_t buffer_size)
 {
-	buffer[0] = '\0';  /* Start with empty string */
+	buffer[0] = '\0'; /* Start with empty string */
 	bool first = true;
 
-	for (int pin = 15; pin >= 0; pin--) {  /* Check from high to low for readable order */
+	for (int pin = 15; pin >= 0; pin--) { /* Check from high to low for readable order */
 		if (mask & (1 << pin)) {
 			if (!first) {
 				strncat(buffer, ",", buffer_size - strlen(buffer) - 1);
@@ -225,19 +274,16 @@ static void print_sx1509b_pin_states(void)
 		int pin_state = gpio_pin_get_raw(sx1509b_dev, pin);
 		bool expected_high = (init_high & (1 << pin)) != 0;
 		bool expected_low = (init_low & (1 << pin)) != 0;
-		const char *expected_str = expected_high ? "HIGH" : (expected_low ? "LOW" : "UNDEF");
+		const char *expected_str =
+			expected_high ? "HIGH" : (expected_low ? "LOW" : "UNDEF");
 		const char *function = get_sx1509b_pin_function(pin);
 
 		if (pin_state >= 0) {
 			const char *state_str = pin_state ? "HIGH" : "LOW";
 			bool state_matches = (pin_state != 0) == expected_high;
 
-			LOG_INF("IO%02d| %-5s | %-8s | %s%s",
-				pin,
-				state_str,
-				expected_str,
-				function,
-				state_matches ? "" : " *** MISMATCH ***");
+			LOG_INF("IO%02d| %-5s | %-8s | %s%s", pin, state_str, expected_str,
+				function, state_matches ? "" : " *** MISMATCH ***");
 
 			if (pin_state) {
 				high_count++;
@@ -249,8 +295,8 @@ static void print_sx1509b_pin_states(void)
 				mismatch_count++;
 			}
 		} else {
-			LOG_WRN("IO%02d| ERROR | %-8s | %s (read failed: %d)",
-				pin, expected_str, function, pin_state);
+			LOG_WRN("IO%02d| ERROR | %-8s | %s (read failed: %d)", pin, expected_str,
+				function, pin_state);
 			error_count++;
 		}
 	}

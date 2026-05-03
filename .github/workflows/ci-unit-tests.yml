@@ -1,0 +1,93 @@
+name: CI Unit Tests
+
+on:
+    push:
+        branches: [main, develop]
+        paths:
+            - "app/tests/**"
+            - "app/src/**"
+            - "app/include/**"
+            - "app/prj.conf"
+            - "app/Kconfig*"
+            - ".github/workflows/ci-unit-tests.yml"
+    pull_request:
+        branches: [main, develop]
+        paths:
+            - "app/tests/**"
+            - "app/src/**"
+            - "app/include/**"
+            - "app/prj.conf"
+            - "app/Kconfig*"
+            - ".github/workflows/ci-unit-tests.yml"
+
+concurrency:
+    group: ci-tests-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+    unit-tests:
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                shell: bash
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 1
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.12'
+
+            - name: Set up Python tools
+              run: |
+                  pip install west
+
+            - name: Reset west workspace metadata
+              run: |
+                  rm -rf .west
+
+            - name: Install missing tools (act slim image only)
+              if: ${{ env.ACT }}
+              run: |
+                  sudo apt-get update -y -q
+                  sudo apt-get install -y -q --no-install-recommends cmake ninja-build
+
+            - name: Setup Zephyr project
+              uses: zephyrproject-rtos/action-zephyr-setup@v1
+              with:
+                  app-path: app
+                  toolchains: arm-zephyr-eabi
+
+            - name: Sync west modules (shallow)
+              run: |
+                  west config build.cmake-args "" || true
+                  west update --fetch smart --narrow --fetch-opt=--depth=1
+
+            - name: Build native_sim tests
+              run: |
+                  source modules/zephyr/zephyr-env.sh
+                  export ZEPHYR_TOOLCHAIN_VARIANT=host
+                  west build app/tests -d app/tests/build -b native_sim -p always
+
+            - name: Run tests
+              run: |
+                  ./app/tests/build/tests/zephyr/zephyr.exe > test_output.log 2>&1
+                  cat test_output.log
+                  grep -q "PROJECT EXECUTION SUCCESSFUL" test_output.log
+
+            - name: Upload test outputs
+              if: always() && !env.ACT
+              uses: actions/upload-artifact@v7
+              with:
+                  name: unit-test-results
+                  path: |
+                      app/tests/build/tests/zephyr/zephyr.elf
+                      test_output.log

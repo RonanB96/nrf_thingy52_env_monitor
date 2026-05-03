@@ -8,12 +8,12 @@
 #define POWER_CONFIG_H__
 
 /* Mesh publishing intervals */
-#define MESH_PUBLISH_INTERVAL_S     (30 * 60)  /* 30 minutes */
+#define MESH_PUBLISH_INTERVAL_S (30 * 60) /* 30 minutes */
 
 /* Low power node poll intervals */
-#define LPN_POLL_INTERVAL_S         (60)       /* 1 minute */
+#define LPN_POLL_INTERVAL_S (60) /* 1 minute */
 
 /* Power management timeouts */
-#define MESH_IDLE_TIMEOUT_S         (120)      /* 2 minutes */
+#define MESH_IDLE_TIMEOUT_S (120) /* 2 minutes */
 
 #endif /* POWER_CONFIG_H__ */

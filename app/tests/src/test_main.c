@@ -19,17 +19,17 @@
 
 static void *test_setup(void)
 {
-    printk("Starting Nordic Thingy:52 Environmental Monitor Test Suite\n");
-    printk("ZTEST Framework initialized successfully\n");
+	printk("Starting Nordic Thingy:52 Environmental Monitor Test Suite\n");
+	printk("ZTEST Framework initialized successfully\n");
 
-    /* Global test setup - initialize any shared resources */
-    return NULL;
+	/* Global test setup - initialize any shared resources */
+	return NULL;
 }
 
 static void test_teardown(void *fixture)
 {
-    printk("Test suite completed successfully\n");
-    /* Global test cleanup */
+	printk("Test suite completed successfully\n");
+	/* Global test cleanup */
 }
 
 /* Global test suite for framework validation */
@@ -43,20 +43,20 @@ ZTEST_SUITE(framework_validation, NULL, test_setup, NULL, NULL, test_teardown);
  */
 ZTEST(framework_validation, test_framework_basic)
 {
-    printk("Running basic framework validation\n");
+	printk("Running basic framework validation\n");
 
-    /* Basic assertion tests */
-    zassert_true(true, "Basic true assertion failed");
-    zassert_false(false, "Basic false assertion failed");
-    zassert_equal(1, 1, "Basic equality assertion failed");
-    zassert_not_equal(1, 2, "Basic inequality assertion failed");
-    zassert_is_null(NULL, "NULL pointer assertion failed");
+	/* Basic assertion tests */
+	zassert_true(true, "Basic true assertion failed");
+	zassert_false(false, "Basic false assertion failed");
+	zassert_equal(1, 1, "Basic equality assertion failed");
+	zassert_not_equal(1, 2, "Basic inequality assertion failed");
+	zassert_is_null(NULL, "NULL pointer assertion failed");
 
-    /* String comparison test */
-    const char *test_str = "test";
-    zassert_str_equal(test_str, "test", "String equality assertion failed");
+	/* String comparison test */
+	const char *test_str = "test";
+	zassert_str_equal(test_str, "test", "String equality assertion failed");
 
-    printk("Framework validation tests passed\n");
+	printk("Framework validation tests passed\n");
 }
 
 /**
@@ -67,22 +67,22 @@ ZTEST(framework_validation, test_framework_basic)
  */
 ZTEST(framework_validation, test_floating_point_support)
 {
-    printk("Testing floating point support\n");
+	printk("Testing floating point support\n");
 
-    float temp = 25.5f;
-    float humidity = 60.2f;
-    float pressure = 1013.25f;
+	float temp = 25.5f;
+	float humidity = 60.2f;
+	float pressure = 1013.25f;
 
-    /* Test basic floating point operations */
-    zassert_within(temp, 25.5f, 0.01f, "Temperature float comparison failed");
-    zassert_within(humidity, 60.2f, 0.01f, "Humidity float comparison failed");
-    zassert_within(pressure, 1013.25f, 0.01f, "Pressure float comparison failed");
+	/* Test basic floating point operations */
+	zassert_within(temp, 25.5f, 0.01f, "Temperature float comparison failed");
+	zassert_within(humidity, 60.2f, 0.01f, "Humidity float comparison failed");
+	zassert_within(pressure, 1013.25f, 0.01f, "Pressure float comparison failed");
 
-    /* Test floating point arithmetic */
-    float sum = temp + humidity;
-    zassert_within(sum, 85.7f, 0.01f, "Float addition failed");
+	/* Test floating point arithmetic */
+	float sum = temp + humidity;
+	zassert_within(sum, 85.7f, 0.01f, "Float addition failed");
 
-    printk("Floating point support validated\n");
+	printk("Floating point support validated\n");
 }
 
 /**
@@ -92,22 +92,22 @@ ZTEST(framework_validation, test_floating_point_support)
  */
 ZTEST(framework_validation, test_memory_allocation)
 {
-    printk("Testing memory allocation\n");
+	printk("Testing memory allocation\n");
 
-    /* Test stack allocation */
-    char stack_buffer[256];
-    memset(stack_buffer, 0xAA, sizeof(stack_buffer));
+	/* Test stack allocation */
+	char stack_buffer[256];
+	memset(stack_buffer, 0xAA, sizeof(stack_buffer));
 
-    bool all_set = true;
-    for (int i = 0; i < sizeof(stack_buffer); i++) {
-        if (stack_buffer[i] != (char)0xAA) {
-            all_set = false;
-            break;
-        }
-    }
+	bool all_set = true;
+	for (int i = 0; i < sizeof(stack_buffer); i++) {
+		if (stack_buffer[i] != (char)0xAA) {
+			all_set = false;
+			break;
+		}
+	}
 
-    zassert_true(all_set, "Stack buffer initialization failed");
-    printk("Memory allocation tests passed\n");
+	zassert_true(all_set, "Stack buffer initialization failed");
+	printk("Memory allocation tests passed\n");
 }
 
 /**
@@ -125,12 +125,12 @@ ZTEST_SUITE(build_system_validation, NULL, NULL, NULL, NULL, NULL);
  */
 ZTEST(build_system_validation, test_build_configuration)
 {
-    printk("Testing build configuration\n");
+	printk("Testing build configuration\n");
 
-    /* Verify ZTEST is enabled */
-    zassert_true(IS_ENABLED(CONFIG_ZTEST), "CONFIG_ZTEST should be enabled");
+	/* Verify ZTEST is enabled */
+	zassert_true(IS_ENABLED(CONFIG_ZTEST), "CONFIG_ZTEST should be enabled");
 
-    printk("Build configuration validated\n");
+	printk("Build configuration validated\n");
 }
 
 /**
@@ -141,13 +141,13 @@ ZTEST(build_system_validation, test_build_configuration)
  */
 ZTEST(build_system_validation, test_system_functionality)
 {
-    printk("Testing system functionality\n");
+	printk("Testing system functionality\n");
 
-    /* Test simple arithmetic to ensure CPU is working */
-    int a = 10;
-    int b = 20;
-    int result = a + b;
-    zassert_equal(result, 30, "Basic arithmetic should work");
+	/* Test simple arithmetic to ensure CPU is working */
+	int a = 10;
+	int b = 20;
+	int result = a + b;
+	zassert_equal(result, 30, "Basic arithmetic should work");
 
-    printk("System functionality validated\n");
+	printk("System functionality validated\n");
 }

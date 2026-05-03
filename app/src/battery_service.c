@@ -33,14 +33,14 @@ static const struct device *voltage_dev = DEVICE_DT_GET(VBATT_NODE);
 static const struct gpio_dt_spec charge_status_gpio = GPIO_DT_SPEC_GET(CHARGE_STATUS_NODE, gpios);
 #endif
 
-#define BATTERY_VOLTAGE_FULL_MV 4200   /* Typical LiPo full voltage */
-#define BATTERY_VOLTAGE_EMPTY_MV 3000  /* Typical LiPo empty voltage */
+#define BATTERY_VOLTAGE_FULL_MV  4200 /* Typical LiPo full voltage */
+#define BATTERY_VOLTAGE_EMPTY_MV 3000 /* Typical LiPo empty voltage */
 
 /* Battery monitoring data */
 struct battery_data {
 	uint8_t last_level;
 	bool initialized;
-	bool last_charging_state;  /* Track last charging state for interrupt logging */
+	bool last_charging_state; /* Track last charging state for interrupt logging */
 	void (*charging_changed_cb)(bool charging); /* Callback for charging status changes */
 };
 
@@ -53,7 +53,7 @@ static K_MUTEX_DEFINE(battery_mutex);
 static struct gpio_callback charge_cb_data;
 
 /* Debouncing for charging status interrupt */
-#define CHARGE_STATUS_DEBOUNCE_MS 300  /* 300ms debounce time */
+#define CHARGE_STATUS_DEBOUNCE_MS 300 /* 300ms debounce time */
 static struct k_work_delayable charge_debounce_work;
 
 /* ADC calibration function for battery measurement */
@@ -65,10 +65,10 @@ static int battery_adc_calibrate(void)
 		k_timeout_t earliest_sample;
 		uint16_t raw;
 	};
-	
+
 	struct voltage_data *voltage_data = (struct voltage_data *)voltage_dev->data;
 	struct adc_sequence *seq = &voltage_data->sequence;
-	
+
 	/* Get ADC device from the voltage sensor's configuration */
 	struct voltage_divider_dt_spec vdiv_spec = VOLTAGE_DIVIDER_DT_SPEC_GET(VBATT_NODE);
 	const struct device *adc_dev = vdiv_spec.port.dev;
@@ -80,19 +80,18 @@ static int battery_adc_calibrate(void)
 		return -ENODEV;
 	}
 
-	LOG_INF("Starting ADC calibration for battery channel %d...", 
-		vdiv_spec.port.channel_id);
-	
+	LOG_INF("Starting ADC calibration for battery channel %d...", vdiv_spec.port.channel_id);
+
 	/* Temporarily enable calibration on the voltage device's existing sequence */
 	bool original_calibrate = seq->calibrate;
 	seq->calibrate = true;
-	
+
 	/* Run the calibration using the voltage device's ADC sequence */
 	ret = adc_read(adc_dev, seq);
-	
+
 	/* Restore original calibrate setting */
 	seq->calibrate = original_calibrate;
-	
+
 	if (ret != 0) {
 		LOG_ERR("ADC calibration failed: %d", ret);
 		return ret;
@@ -131,7 +130,8 @@ static int battery_sensor_init(void)
  */
 static uint8_t voltage_to_percentage(uint32_t voltage_mv)
 {
-	/* Nordic's method: voltage_mv is already the actual battery voltage after divider correction */
+	/* Nordic's method: voltage_mv is already the actual battery voltage after divider
+	 * correction */
 	LOG_DBG("Battery voltage: %d mV", voltage_mv);
 
 	if (voltage_mv >= BATTERY_VOLTAGE_FULL_MV) {
@@ -142,19 +142,21 @@ static uint8_t voltage_to_percentage(uint32_t voltage_mv)
 
 	/* Linear interpolation between empty and full voltage */
 	return (uint8_t)((voltage_mv - BATTERY_VOLTAGE_EMPTY_MV) * 100 /
-			(BATTERY_VOLTAGE_FULL_MV - BATTERY_VOLTAGE_EMPTY_MV));
+			 (BATTERY_VOLTAGE_FULL_MV - BATTERY_VOLTAGE_EMPTY_MV));
 }
 
 /* Debounced charging status work handler */
 static void charge_status_debounce_work(struct k_work *work)
 {
+	(void)work;
 #if DT_NODE_EXISTS(CHARGE_STATUS_NODE)
 	bool is_charging = gpio_pin_get_dt(&charge_status_gpio) == 0; /* Active low */
 
 	/* Only update if state changed */
 	if (is_charging != bat_data.last_charging_state) {
 		bat_data.last_charging_state = is_charging;
-		LOG_INF("Battery charging status changed: %s", is_charging ? "CHARGING" : "NOT CHARGING");
+		LOG_INF("Battery charging status changed: %s",
+			is_charging ? "CHARGING" : "NOT CHARGING");
 
 		/* Notify callback if registered */
 		if (bat_data.charging_changed_cb) {
@@ -165,16 +167,18 @@ static void charge_status_debounce_work(struct k_work *work)
 }
 
 /* Charging status interrupt handler */
-static void charge_status_interrupt(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+static void charge_status_interrupt(const struct device *dev, struct gpio_callback *cb,
+				    uint32_t pins)
 {
+	(void)dev;
+	(void)cb;
+	(void)pins;
 #if DT_NODE_EXISTS(CHARGE_STATUS_NODE)
 	/* Cancel any pending debounce work and schedule a new one */
 	k_work_cancel_delayable(&charge_debounce_work);
 	k_work_schedule(&charge_debounce_work, K_MSEC(CHARGE_STATUS_DEBOUNCE_MS));
 #endif
 }
-
-
 
 static int battery_sample(void)
 {
@@ -185,8 +189,6 @@ static int battery_sample(void)
 		LOG_ERR("Battery service not initialized");
 		return -EINVAL;
 	}
-
-
 
 	/* Fetch sensor data - this handles power management and ADC reading */
 	ret = sensor_sample_fetch(voltage_dev);
@@ -203,7 +205,7 @@ static int battery_sample(void)
 	}
 
 	/* Convert to millivolts */
-	uint32_t battery_voltage_mv = sensor_value_to_double(&voltage) * 1000;
+	uint32_t battery_voltage_mv = (uint32_t)(sensor_value_to_double(&voltage) * 1000.0);
 
 	uint8_t percentage = voltage_to_percentage(battery_voltage_mv);
 
@@ -265,7 +267,8 @@ int battery_service_init(void)
 
 	/* Initialize charging state */
 	bat_data.last_charging_state = gpio_pin_get_dt(&charge_status_gpio) == 0;
-	LOG_INF("Initial charging state: %s", bat_data.last_charging_state ? "CHARGING" : "NOT CHARGING");
+	LOG_INF("Initial charging state: %s",
+		bat_data.last_charging_state ? "CHARGING" : "NOT CHARGING");
 
 	/* Initialize debounce work */
 	k_work_init_delayable(&charge_debounce_work, charge_status_debounce_work);

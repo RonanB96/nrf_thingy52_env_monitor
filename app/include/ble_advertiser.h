@@ -18,13 +18,13 @@ extern "C" {
  * @brief Environmental sensor advertising data
  */
 struct ble_sensor_data {
-	uint16_t temperature;    /* Temperature in 0.01°C */
-	uint16_t humidity;       /* Humidity in 0.01% */
-	uint16_t pressure;       /* Pressure in 0.1 hPa */
-	uint16_t eco2;          /* CO2 in ppm */
-	uint16_t tvoc;          /* TVOC in ppb */
-	uint8_t battery_level;   /* Battery in % */
-	bool battery_charging;   /* Battery charging status */
+	uint16_t temperature;  /* Temperature in 0.01°C */
+	uint16_t humidity;     /* Humidity in 0.01% */
+	uint16_t pressure;     /* Pressure in 0.1 hPa */
+	uint16_t eco2;         /* CO2 in ppm */
+	uint16_t tvoc;         /* TVOC in ppb */
+	uint8_t battery_level; /* Battery in % */
+	bool battery_charging; /* Battery charging status */
 } __packed;
 
 /**

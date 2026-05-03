@@ -1,0 +1,75 @@
+name: CI Static Analysis
+
+on:
+    push:
+        branches: [main, develop]
+        paths:
+            - ".github/workflows/**"
+            - ".clang-format"
+            - ".checkpatch.conf"
+            - ".clang-tidy"
+            - ".codechecker.json"
+            - ".codechecker.skip"
+            - "app/**"
+            - ".github/workflows/ci-static-analysis.yml"
+    pull_request:
+        branches: [main, develop]
+        paths:
+            - ".github/workflows/**"
+            - ".clang-format"
+            - ".checkpatch.conf"
+            - ".clang-tidy"
+            - ".codechecker.json"
+            - ".codechecker.skip"
+            - "app/**"
+            - ".github/workflows/ci-static-analysis.yml"
+
+concurrency:
+    group: ci-static-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+    format-and-lint:
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                shell: bash
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Set up Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: '3.12'
+
+            - name: Show tool versions
+              run: |
+                  clang-format --version
+
+
+            - name: Check C formatting
+              run: |
+                  mapfile -t files < <(find app/src app/include app/tests/src -type f \( -name '*.c' -o -name '*.h' \))
+                  if [[ ${#files[@]} -eq 0 ]]; then
+                    echo "No C sources found"
+                    exit 0
+                  fi
+                  clang-format --dry-run --Werror "${files[@]}"
+
+            - name: Lint workflow YAML
+              run: |
+                  pip install yamllint
+                  yamllint -d "{extends: default, rules: {line-length: disable, truthy: disable, document-start: disable}}" .github/workflows
+
+            - name: Lint workflow logic
+              run: |
+                  bash <(curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1>/dev/null
+                  ./actionlint -color .github/workflows/*.yml

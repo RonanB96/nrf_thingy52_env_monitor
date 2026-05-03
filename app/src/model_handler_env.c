@@ -26,13 +26,13 @@
 /* Thingy52 has HTS221 sensor for temperature and humidity */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(hts221), okay)
 /** Thingy52 */
-#define SENSOR_NODE DT_NODELABEL(hts221)
-#define TEMP_DATA_TYPE SENSOR_CHAN_AMBIENT_TEMP
+#define SENSOR_NODE        DT_NODELABEL(hts221)
+#define TEMP_DATA_TYPE     SENSOR_CHAN_AMBIENT_TEMP
 #define HUMIDITY_DATA_TYPE SENSOR_CHAN_HUMIDITY
 #elif DT_NODE_HAS_STATUS(DT_NODELABEL(temp), okay)
 /** nRF52 DK */
-#define SENSOR_NODE DT_NODELABEL(temp)
-#define TEMP_DATA_TYPE SENSOR_CHAN_DIE_TEMP
+#define SENSOR_NODE        DT_NODELABEL(temp)
+#define TEMP_DATA_TYPE     SENSOR_CHAN_DIE_TEMP
 /* No humidity sensor on DK */
 #define HUMIDITY_DATA_TYPE SENSOR_CHAN_HUMIDITY
 #else
@@ -44,30 +44,36 @@
 #error "LPS22HB pressure sensor not found or not enabled in device tree!"
 #endif
 #define PRESSURE_SENSOR_NODE DT_NODELABEL(lps22hb_press)
-#define PRESSURE_DATA_TYPE SENSOR_CHAN_PRESS
+#define PRESSURE_DATA_TYPE   SENSOR_CHAN_PRESS
 
 /* Require CCS811 gas sensor */
 #if !DT_NODE_HAS_STATUS(DT_NODELABEL(ccs811), okay)
 #error "CCS811 gas sensor not found or not enabled in device tree!"
 #endif
 #define GAS_SENSOR_NODE DT_NODELABEL(ccs811)
-#define CO2_DATA_TYPE SENSOR_CHAN_CO2
-#define VOC_DATA_TYPE SENSOR_CHAN_VOC
+#define CO2_DATA_TYPE   SENSOR_CHAN_CO2
+#define VOC_DATA_TYPE   SENSOR_CHAN_VOC
 
-#define TEMP_INIT(_val) { .format = &bt_mesh_sensor_format_temp, .raw = {      \
-	FIELD_GET(GENMASK(7, 0), (_val) * 100),                                \
-	FIELD_GET(GENMASK(15, 8), (_val) * 100)                                \
-}}
+#define TEMP_INIT(_val)                                                                            \
+	{                                                                                          \
+		.format = &bt_mesh_sensor_format_temp,                                             \
+		.raw = { FIELD_GET(GENMASK(7, 0), (_val) * 100),                                   \
+			 FIELD_GET(GENMASK(15, 8), (_val) * 100) }                                 \
+	}
 
-#define HUMIDITY_INIT(_val) { .format = &bt_mesh_sensor_format_percentage_16, .raw = {      \
-	FIELD_GET(GENMASK(7, 0), (_val) * 100),                                \
-	FIELD_GET(GENMASK(15, 8), (_val) * 100)                                \
-}}
+#define HUMIDITY_INIT(_val)                                                                        \
+	{                                                                                          \
+		.format = &bt_mesh_sensor_format_percentage_16,                                    \
+		.raw = { FIELD_GET(GENMASK(7, 0), (_val) * 100),                                   \
+			 FIELD_GET(GENMASK(15, 8), (_val) * 100) }                                 \
+	}
 
-#define CO2_INIT(_val) { .format = &bt_mesh_sensor_format_co2_concentration, .raw = {      \
-	FIELD_GET(GENMASK(7, 0), (_val)),                                        \
-	FIELD_GET(GENMASK(15, 8), (_val))                                        \
-}}
+#define CO2_INIT(_val)                                                                             \
+	{                                                                                          \
+		.format = &bt_mesh_sensor_format_co2_concentration,                                \
+		.raw = { FIELD_GET(GENMASK(7, 0), (_val)),                                         \
+			 FIELD_GET(GENMASK(15, 8), (_val)) }                                       \
+	}
 
 static const struct device *env_sensor_dev = DEVICE_DT_GET(SENSOR_NODE);
 static const struct device *pressure_sensor_dev = DEVICE_DT_GET(PRESSURE_SENSOR_NODE);
@@ -82,10 +88,8 @@ static uint32_t tvoc_sample_count;
 /*******************************************************************************
  * Temperature Sensor
  ******************************************************************************/
-static int temperature_get(struct bt_mesh_sensor_srv *srv,
-			   struct bt_mesh_sensor *sensor,
-			   struct bt_mesh_msg_ctx *ctx,
-			   struct bt_mesh_sensor_value *rsp)
+static int temperature_get(struct bt_mesh_sensor_srv *srv, struct bt_mesh_sensor *sensor,
+			   struct bt_mesh_msg_ctx *ctx, struct bt_mesh_sensor_value *rsp)
 {
 	float temperature;
 	int err;
@@ -100,11 +104,10 @@ static int temperature_get(struct bt_mesh_sensor_srv *srv,
 	/* Convert float to sensor_value for BLE Mesh */
 	struct sensor_value sensor_val = {
 		.val1 = (int32_t)temperature,
-		.val2 = (int32_t)((temperature - (int32_t)temperature) * 1000000)
-	};
+		.val2 = (int32_t)((temperature - (int32_t)temperature) * 1000000)};
 
-	err = bt_mesh_sensor_value_from_sensor_value(
-		sensor->type->channels[0].format, &sensor_val, rsp);
+	err = bt_mesh_sensor_value_from_sensor_value(sensor->type->channels[0].format, &sensor_val,
+						     rsp);
 	if (err && err != -ERANGE) {
 		printk("Error encoding temperature sensor data (%d)\n", err);
 		return err;
@@ -116,10 +119,11 @@ static int temperature_get(struct bt_mesh_sensor_srv *srv,
 }
 
 static const struct bt_mesh_sensor_descriptor temp_descriptor = {
-	.tolerance = {
-		.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(4),
-		.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(4),
-	},
+	.tolerance =
+		{
+			.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(4),
+			.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(4),
+		},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_INSTANTANEOUS,
 };
 
@@ -132,10 +136,8 @@ static struct bt_mesh_sensor temperature_sensor = {
 /*******************************************************************************
  * Humidity Sensor
  ******************************************************************************/
-static int humidity_get(struct bt_mesh_sensor_srv *srv,
-			struct bt_mesh_sensor *sensor,
-			struct bt_mesh_msg_ctx *ctx,
-			struct bt_mesh_sensor_value *rsp)
+static int humidity_get(struct bt_mesh_sensor_srv *srv, struct bt_mesh_sensor *sensor,
+			struct bt_mesh_msg_ctx *ctx, struct bt_mesh_sensor_value *rsp)
 {
 	float humidity;
 	int err;
@@ -150,11 +152,10 @@ static int humidity_get(struct bt_mesh_sensor_srv *srv,
 	/* Convert float to sensor_value for BLE Mesh */
 	struct sensor_value sensor_val = {
 		.val1 = (int32_t)humidity,
-		.val2 = (int32_t)((humidity - (int32_t)humidity) * 1000000)
-	};
+		.val2 = (int32_t)((humidity - (int32_t)humidity) * 1000000)};
 
-	err = bt_mesh_sensor_value_from_sensor_value(
-		sensor->type->channels[0].format, &sensor_val, rsp);
+	err = bt_mesh_sensor_value_from_sensor_value(sensor->type->channels[0].format, &sensor_val,
+						     rsp);
 	if (err && err != -ERANGE) {
 		printk("Error encoding humidity sensor data (%d)\n", err);
 		return err;
@@ -166,10 +167,11 @@ static int humidity_get(struct bt_mesh_sensor_srv *srv,
 }
 
 static const struct bt_mesh_sensor_descriptor humidity_descriptor = {
-	.tolerance = {
-		.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(3),
-		.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(3),
-	},
+	.tolerance =
+		{
+			.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(3),
+			.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(3),
+		},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_INSTANTANEOUS,
 };
 
@@ -182,10 +184,8 @@ static struct bt_mesh_sensor humidity_sensor = {
 /*******************************************************************************
  * Pressure Sensor (LPS22HB)
  ******************************************************************************/
-static int pressure_get(struct bt_mesh_sensor_srv *srv,
-			struct bt_mesh_sensor *sensor,
-			struct bt_mesh_msg_ctx *ctx,
-			struct bt_mesh_sensor_value *rsp)
+static int pressure_get(struct bt_mesh_sensor_srv *srv, struct bt_mesh_sensor *sensor,
+			struct bt_mesh_msg_ctx *ctx, struct bt_mesh_sensor_value *rsp)
 {
 	float pressure;
 	int err;
@@ -199,7 +199,7 @@ static int pressure_get(struct bt_mesh_sensor_srv *srv,
 	}
 
 	/* Convert from hPa to Pa for Bluetooth Mesh */
-	uint32_t pressure_pa = (uint32_t)(pressure * 100);  /* hPa to Pa */
+	uint32_t pressure_pa = (uint32_t)(pressure * 100); /* hPa to Pa */
 
 	err = bt_mesh_sensor_value_from_micro(sensor->type->channels[0].format,
 					      pressure_pa * 1000000LL, rsp);
@@ -208,16 +208,16 @@ static int pressure_get(struct bt_mesh_sensor_srv *srv,
 		return err;
 	}
 
-	printk("Pressure: %s Pa (sample #%d)\n",
-	       bt_mesh_sensor_ch_str(rsp), pressure_sample_count);
+	printk("Pressure: %s Pa (sample #%d)\n", bt_mesh_sensor_ch_str(rsp), pressure_sample_count);
 	return 0;
 }
 
 static const struct bt_mesh_sensor_descriptor pressure_descriptor = {
-	.tolerance = {
-		.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
-		.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
-	},
+	.tolerance =
+		{
+			.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
+			.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
+		},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_INSTANTANEOUS,
 };
 
@@ -230,10 +230,8 @@ static struct bt_mesh_sensor pressure_sensor = {
 /*******************************************************************************
  * CO2 Sensor (CCS811)
  ******************************************************************************/
-static int co2_get(struct bt_mesh_sensor_srv *srv,
-		    struct bt_mesh_sensor *sensor,
-		    struct bt_mesh_msg_ctx *ctx,
-		    struct bt_mesh_sensor_value *rsp)
+static int co2_get(struct bt_mesh_sensor_srv *srv, struct bt_mesh_sensor *sensor,
+		   struct bt_mesh_msg_ctx *ctx, struct bt_mesh_sensor_value *rsp)
 {
 	float eco2;
 	int err;
@@ -256,16 +254,16 @@ static int co2_get(struct bt_mesh_sensor_srv *srv,
 		return err;
 	}
 
-	printk("eCO2: %s ppm (sample #%d)\n",
-	       bt_mesh_sensor_ch_str(rsp), eco2_sample_count);
+	printk("eCO2: %s ppm (sample #%d)\n", bt_mesh_sensor_ch_str(rsp), eco2_sample_count);
 	return 0;
 }
 
 static const struct bt_mesh_sensor_descriptor co2_descriptor = {
-	.tolerance = {
-		.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
-		.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
-	},
+	.tolerance =
+		{
+			.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
+			.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
+		},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_INSTANTANEOUS,
 };
 
@@ -278,10 +276,8 @@ static struct bt_mesh_sensor co2_sensor = {
 /*******************************************************************************
  * VOC Sensor (CCS811)
  ******************************************************************************/
-static int voc_get(struct bt_mesh_sensor_srv *srv,
-		    struct bt_mesh_sensor *sensor,
-		    struct bt_mesh_msg_ctx *ctx,
-		    struct bt_mesh_sensor_value *rsp)
+static int voc_get(struct bt_mesh_sensor_srv *srv, struct bt_mesh_sensor *sensor,
+		   struct bt_mesh_msg_ctx *ctx, struct bt_mesh_sensor_value *rsp)
 {
 	float tvoc;
 	int err;
@@ -304,16 +300,16 @@ static int voc_get(struct bt_mesh_sensor_srv *srv,
 		return err;
 	}
 
-	printk("TVOC: %s ppb (sample #%d)\n",
-	       bt_mesh_sensor_ch_str(rsp), tvoc_sample_count);
+	printk("TVOC: %s ppb (sample #%d)\n", bt_mesh_sensor_ch_str(rsp), tvoc_sample_count);
 	return 0;
 }
 
 static const struct bt_mesh_sensor_descriptor voc_descriptor = {
-	.tolerance = {
-		.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
-		.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
-	},
+	.tolerance =
+		{
+			.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
+			.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(5),
+		},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_INSTANTANEOUS,
 };
 
@@ -326,10 +322,8 @@ static struct bt_mesh_sensor voc_sensor = {
 /*******************************************************************************
  * Battery Level Sensor
  ******************************************************************************/
-static int battery_get(struct bt_mesh_sensor_srv *srv,
-		       struct bt_mesh_sensor *sensor,
-		       struct bt_mesh_msg_ctx *ctx,
-		       struct bt_mesh_sensor_value *rsp)
+static int battery_get(struct bt_mesh_sensor_srv *srv, struct bt_mesh_sensor *sensor,
+		       struct bt_mesh_msg_ctx *ctx, struct bt_mesh_sensor_value *rsp)
 {
 	int err;
 
@@ -353,15 +347,17 @@ static int battery_get(struct bt_mesh_sensor_srv *srv,
 }
 
 static const struct bt_mesh_sensor_descriptor battery_descriptor = {
-	.tolerance = {
-		.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
-		.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
-	},
+	.tolerance =
+		{
+			.negative = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
+			.positive = BT_MESH_SENSOR_TOLERANCE_ENCODE(2),
+		},
 	.sampling_type = BT_MESH_SENSOR_SAMPLING_INSTANTANEOUS,
 };
 
 static struct bt_mesh_sensor battery_sensor = {
-	.type = &bt_mesh_sensor_present_dev_op_efficiency, /* Using device efficiency as battery level representation */
+	.type = &bt_mesh_sensor_present_dev_op_efficiency, /* Using device efficiency as battery
+							      level representation */
 	.get = battery_get,
 	.descriptor = &battery_descriptor,
 };
@@ -370,12 +366,8 @@ static struct bt_mesh_sensor battery_sensor = {
  * Sensor Array and Server Setup with Publication
  ******************************************************************************/
 static struct bt_mesh_sensor *const env_sensors[] = {
-	&temperature_sensor,
-	&humidity_sensor,
-	&pressure_sensor,
-	&co2_sensor,
-	&voc_sensor,
-	&battery_sensor,
+	&temperature_sensor, &humidity_sensor, &pressure_sensor,
+	&co2_sensor,         &voc_sensor,      &battery_sensor,
 };
 
 static struct bt_mesh_sensor_srv env_sensor_srv =
@@ -385,13 +377,13 @@ static struct bt_mesh_sensor_srv env_sensor_srv =
  * Periodic Sensor Publishing - Optimized for ultra-low power
  ******************************************************************************/
 /* Environmental sensors change slowly - optimize for weeks of battery life */
-#define SENSOR_PUBLISH_INTERVAL_MS (30 * 60 * 1000)  // 30 minutes
-#define CCS811_WARMUP_TIME_MS (5 * 60 * 1000)        // 5 minutes initial warmup
-#define BATTERY_PUBLISH_INTERVAL_MS (6 * 60 * 60 * 1000)  // 6 hours for battery
+#define SENSOR_PUBLISH_INTERVAL_MS  (30 * 60 * 1000)     // 30 minutes
+#define CCS811_WARMUP_TIME_MS       (5 * 60 * 1000)      // 5 minutes initial warmup
+#define BATTERY_PUBLISH_INTERVAL_MS (6 * 60 * 60 * 1000) // 6 hours for battery
 
 /* Dedicated work queue for sensor operations to avoid system work queue overflow */
 #define SENSOR_WORKQUEUE_STACK_SIZE 2048
-#define SENSOR_WORKQUEUE_PRIORITY 5
+#define SENSOR_WORKQUEUE_PRIORITY   5
 
 static K_THREAD_STACK_DEFINE(sensor_workqueue_stack, SENSOR_WORKQUEUE_STACK_SIZE);
 struct k_work_q sensor_work_q;
@@ -400,7 +392,7 @@ static struct k_work_delayable battery_publish_work;
 
 static bool ccs811_warmed_up = false;
 static int64_t startup_time;
-static int sensor_publish_count = 0;  // Track publish cycles for battery timing
+static int sensor_publish_count = 0; // Track publish cycles for battery timing
 
 static void sensor_publish_handler(struct k_work *work)
 {
@@ -430,7 +422,8 @@ static void sensor_publish_handler(struct k_work *work)
 		}
 
 		/* Skip CO2 and VOC sensors during warm-up period */
-		if ((env_sensors[i] == &co2_sensor || env_sensors[i] == &voc_sensor) && !ccs811_warmed_up) {
+		if ((env_sensors[i] == &co2_sensor || env_sensors[i] == &voc_sensor) &&
+		    !ccs811_warmed_up) {
 			printk("Skipping %s sensor - still warming up (%lld/%d ms)\n",
 			       env_sensors[i] == &co2_sensor ? "CO2" : "VOC",
 			       current_time - startup_time, CCS811_WARMUP_TIME_MS);
@@ -456,7 +449,8 @@ static void sensor_publish_handler(struct k_work *work)
 
 reschedule:
 	/* Reschedule for next publication on dedicated work queue */
-	k_work_reschedule_for_queue(&sensor_work_q, &sensor_publish_work, K_MSEC(SENSOR_PUBLISH_INTERVAL_MS));
+	k_work_reschedule_for_queue(&sensor_work_q, &sensor_publish_work,
+				    K_MSEC(SENSOR_PUBLISH_INTERVAL_MS));
 }
 
 static void battery_publish_handler(struct k_work *work)
@@ -491,7 +485,8 @@ static void battery_publish_handler(struct k_work *work)
 
 reschedule:
 	/* Reschedule battery for next publication (much less frequent) */
-	k_work_reschedule_for_queue(&sensor_work_q, &battery_publish_work, K_MSEC(BATTERY_PUBLISH_INTERVAL_MS));
+	k_work_reschedule_for_queue(&sensor_work_q, &battery_publish_work,
+				    K_MSEC(BATTERY_PUBLISH_INTERVAL_MS));
 }
 
 /*******************************************************************************
@@ -560,8 +555,8 @@ const struct bt_mesh_comp *model_handler_init(void)
 	/* Initialize dedicated work queue for sensor operations */
 	k_work_queue_init(&sensor_work_q);
 	k_work_queue_start(&sensor_work_q, sensor_workqueue_stack,
-			   K_THREAD_STACK_SIZEOF(sensor_workqueue_stack),
-			   SENSOR_WORKQUEUE_PRIORITY, NULL);
+			   K_THREAD_STACK_SIZEOF(sensor_workqueue_stack), SENSOR_WORKQUEUE_PRIORITY,
+			   NULL);
 
 	/* Initialize periodic sensor publishing with different schedules */
 	k_work_init_delayable(&sensor_publish_work, sensor_publish_handler);
@@ -584,12 +579,15 @@ const struct bt_mesh_comp *model_handler_init(void)
 	printk("  - VOC: CCS811\n");
 	printk("  - Battery: ADC\n");
 	printk("Starting ultra-low power sensor publishing:\n");
-	printk("  - Environmental sensors every %d minutes\n", SENSOR_PUBLISH_INTERVAL_MS / (60 * 1000));
-	printk("  - Battery sensor every %d hours\n", BATTERY_PUBLISH_INTERVAL_MS / (60 * 60 * 1000));
+	printk("  - Environmental sensors every %d minutes\n",
+	       SENSOR_PUBLISH_INTERVAL_MS / (60 * 1000));
+	printk("  - Battery sensor every %d hours\n",
+	       BATTERY_PUBLISH_INTERVAL_MS / (60 * 60 * 1000));
 
 	/* Start periodic sensor publishing with staggered delays using dedicated work queue */
 	k_work_reschedule_for_queue(&sensor_work_q, &sensor_publish_work, K_SECONDS(5));
-	k_work_reschedule_for_queue(&sensor_work_q, &battery_publish_work, K_SECONDS(30)); /* Battery starts 30s later */
+	k_work_reschedule_for_queue(&sensor_work_q, &battery_publish_work,
+				    K_SECONDS(30)); /* Battery starts 30s later */
 
 	return &comp;
 }

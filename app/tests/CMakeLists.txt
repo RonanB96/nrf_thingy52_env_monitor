@@ -15,6 +15,7 @@ target_sources(app PRIVATE
     src/test_ess_service.c
     src/test_mock_framework.c
     src/test_sensor_manager.c
+    src/test_sensor_manager_policy.c
     src/mocks/mock_i2c.c
     src/mocks/mock_gpio.c
     src/mocks/mock_sensor.c

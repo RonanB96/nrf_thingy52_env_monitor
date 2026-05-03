@@ -24,7 +24,7 @@ static struct k_work_delayable advertising_work;
 
 /* Convert sensor manager data to BLE format */
 static void convert_sensor_data(const struct sensor_data *sensor_data,
-                               struct ble_sensor_data *ble_data)
+				struct ble_sensor_data *ble_data)
 {
 	/* Convert temperature from °C to 0.01°C */
 	ble_data->temperature = (uint16_t)(sensor_data->temperature * 100.0f);
@@ -77,8 +77,7 @@ reschedule:
 /* Provisioning callbacks */
 static void prov_complete(uint16_t net_idx, uint16_t addr)
 {
-	printk("Provisioning complete! Net IDX: 0x%04x, Address: 0x%04x\n",
-		   net_idx, addr);
+	printk("Provisioning complete! Net IDX: 0x%04x, Address: 0x%04x\n", net_idx, addr);
 }
 
 static void prov_reset(void)
@@ -89,10 +88,8 @@ static void prov_reset(void)
 }
 
 /* Pre-shared authentication key for production security (128-bit) */
-static const uint8_t static_auth_key[16] = {
-	0xA5, 0x3E, 0x60, 0x37, 0x8D, 0x2A, 0xEE, 0x64,
-	0x3F, 0x63, 0x4F, 0xD3, 0xE5, 0x2D, 0xDE, 0x11
-};
+static const uint8_t static_auth_key[16] = {0xA5, 0x3E, 0x60, 0x37, 0x8D, 0x2A, 0xEE, 0x64,
+					    0x3F, 0x63, 0x4F, 0xD3, 0xE5, 0x2D, 0xDE, 0x11};
 
 /* Provisioning structure */
 static const struct bt_mesh_prov prov = {
@@ -171,10 +168,10 @@ static void bt_ready(int err)
 
 	printk("Mesh initialized - Environmental monitoring active\n");
 
-	/* Debug: Print stack usage information */
-	#if CONFIG_THREAD_ANALYZER
+/* Debug: Print stack usage information */
+#if CONFIG_THREAD_ANALYZER
 	thread_analyzer_print();
-	#endif
+#endif
 
 	/* Initialize battery service after mesh is ready */
 	err = battery_service_init();
@@ -185,11 +182,11 @@ static void bt_ready(int err)
 		printk("Battery service initialized\n");
 	}
 
-	/* Debug: Print stack usage information after initialization */
-	#if CONFIG_THREAD_ANALYZER
+/* Debug: Print stack usage information after initialization */
+#if CONFIG_THREAD_ANALYZER
 	printk("=== Stack Analysis After Initialization ===\n");
 	thread_analyzer_print();
-	#endif
+#endif
 }
 
 int main(void)

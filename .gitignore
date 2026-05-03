@@ -61,3 +61,8 @@ external
 .vscode/.cache
 
 modules
+twister-out*/
+.codechecker/
+.serena/
+reports/
+.tmp
