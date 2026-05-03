@@ -2,13 +2,13 @@ name: CI Build
 
 on:
     push:
-        branches: [ main, develop ]
+        branches: [main, develop]
         paths:
             - ".github/workflows/**"
             - "app/**"
             - ".github/workflows/ci-build.yml"
     pull_request:
-        branches: [ main, develop ]
+        branches: [main, develop]
         paths:
             - ".github/workflows/**"
             - "app/**"

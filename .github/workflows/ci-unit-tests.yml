@@ -2,7 +2,7 @@ name: CI Unit Tests
 
 on:
     push:
-        branches: [ main, develop ]
+        branches: [main, develop]
         paths:
             - "app/tests/**"
             - "app/src/**"
@@ -11,7 +11,7 @@ on:
             - "app/Kconfig*"
             - ".github/workflows/ci-unit-tests.yml"
     pull_request:
-        branches: [ main, develop ]
+        branches: [main, develop]
         paths:
             - "app/tests/**"
             - "app/src/**"
