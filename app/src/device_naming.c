@@ -2,7 +2,7 @@
  * Simple device naming using hardware ID only
  * Nordic Thingy:52 Environmental Monitor
  *
- * Generates unique device names like "Thingy52-A1B2C3D4"
+ * Generates unique device names like "T52-A1B2C3D4" (prefix defined by DEVICE_PREFIX)
  * Home Assistant handles room assignment
  *
  * Copyright (c) 2025
@@ -22,9 +22,10 @@ LOG_MODULE_REGISTER(device_naming, CONFIG_LOG_DEFAULT_LEVEL);
 static char device_name_buffer[DEVICE_NAME_MAX_LEN];
 static bool naming_initialized = false;
 
-static const size_t DEVICE_NAME_MIN_BUF = 16U; /* Minimum buffer to fit "Thingy52-XXXXXXXX\0" */
-static const int DEVICE_ID_BYTES_USED = 4;     /* Last 4 bytes of HW ID used for unique suffix */
-#define BITS_PER_BYTE_SHIFT CHAR_BIT           /* Bit shift per byte */
+static const size_t DEVICE_NAME_MIN_BUF =
+	16U; /* Minimum buffer to fit "T52-XXXXXXXX\0" (prefix + dash + 8 hex digits + NUL) */
+static const int DEVICE_ID_BYTES_USED = 4; /* Last 4 bytes of HW ID used for unique suffix */
+#define BITS_PER_BYTE_SHIFT CHAR_BIT       /* Bit shift per byte */
 
 /* hwinfo returns up to 8 bytes of device ID on nRF52 */
 #define HWINFO_DEVICE_ID_LEN 8U
