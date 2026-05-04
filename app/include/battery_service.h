@@ -14,6 +14,8 @@
 extern "C" {
 #endif
 
+typedef void (*battery_charging_cb_t)(bool charging);
+
 /**
  * @brief Initialize the battery service
  *
@@ -27,9 +29,9 @@ int battery_service_init(void);
 /**
  * @brief Get the current battery level
  *
- * @return Battery level in percentage (0-100)
+ * @return Battery level in percentage (0-100), or negative error code on failure
  */
-uint8_t battery_service_get_level(void);
+int battery_service_get_level(void);
 
 /**
  * @brief Sample battery level now
@@ -53,7 +55,7 @@ bool battery_service_is_charging(void);
  *
  * @param callback Function to call when charging status changes
  */
-void battery_service_register_charging_callback(void (*callback)(bool charging));
+void battery_service_register_charging_callback(battery_charging_cb_t callback);
 
 #ifdef __cplusplus
 }

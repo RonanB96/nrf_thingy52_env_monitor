@@ -28,9 +28,6 @@ concurrency:
     group: ci-static-${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
-env:
-    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
     format-and-lint:
         runs-on: ubuntu-latest
@@ -70,6 +67,6 @@ jobs:
                   yamllint -d "{extends: default, rules: {line-length: disable, truthy: disable, document-start: disable}}" .github/workflows
 
             - name: Lint workflow logic
-              run: |
-                  bash <(curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1>/dev/null
-                  ./actionlint -color .github/workflows/*.yml
+              uses: reviewdog/action-actionlint@v1
+              with:
+                  fail_level: error

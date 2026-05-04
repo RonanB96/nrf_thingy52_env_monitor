@@ -21,32 +21,45 @@
 LOG_MODULE_REGISTER(ess_service, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* ESS Trigger Setting conditions - Bluetooth SIG standard definitions */
-#define ESS_TRIGGER_INACTIVE                      0x00
-#define ESS_TRIGGER_FIXED_TIME_INTERVAL           0x01
-#define ESS_TRIGGER_NO_LESS_THAN_SPECIFIED_TIME   0x02
-#define ESS_TRIGGER_VALUE_CHANGED                 0x03
-#define ESS_TRIGGER_LESS_THAN_REF_VALUE           0x04
-#define ESS_TRIGGER_LESS_OR_EQUAL_TO_REF_VALUE    0x05
-#define ESS_TRIGGER_GREATER_THAN_REF_VALUE        0x06
-#define ESS_TRIGGER_GREATER_OR_EQUAL_TO_REF_VALUE 0x07
-#define ESS_TRIGGER_EQUAL_TO_REF_VALUE            0x08
-#define ESS_TRIGGER_NOT_EQUAL_TO_REF_VALUE        0x09
+enum ess_trigger_condition {
+	ESS_TRIGGER_INACTIVE = 0x00,
+	ESS_TRIGGER_FIXED_TIME_INTERVAL = 0x01,
+	ESS_TRIGGER_NO_LESS_THAN_SPECIFIED_TIME = 0x02,
+	ESS_TRIGGER_VALUE_CHANGED = 0x03,
+	ESS_TRIGGER_LESS_THAN_REF_VALUE = 0x04,
+	ESS_TRIGGER_LESS_OR_EQUAL_TO_REF_VALUE = 0x05,
+	ESS_TRIGGER_GREATER_THAN_REF_VALUE = 0x06,
+	ESS_TRIGGER_GREATER_OR_EQUAL_TO_REF_VALUE = 0x07,
+	ESS_TRIGGER_EQUAL_TO_REF_VALUE = 0x08,
+	ESS_TRIGGER_NOT_EQUAL_TO_REF_VALUE = 0x09,
+};
 
 /* ESS Measurement Descriptor – Sampling Functions - Bluetooth SIG standard */
-#define ESS_DESC_SAMPLING_UNSPECIFIED     0x00
-#define ESS_DESC_SAMPLING_INSTANTANEOUS   0x01
-#define ESS_DESC_SAMPLING_ARITHMETIC_MEAN 0x02
-#define ESS_DESC_SAMPLING_RMS             0x03
-#define ESS_DESC_SAMPLING_MAXIMUM         0x04
-#define ESS_DESC_SAMPLING_MINIMUM         0x05
-#define ESS_DESC_SAMPLING_ACCUMULATED     0x06
-#define ESS_DESC_SAMPLING_COUNT           0x07
+enum ess_sampling_func {
+	ESS_SAMPLING_UNSPECIFIED = 0x00,
+	ESS_SAMPLING_INSTANTANEOUS = 0x01,
+	ESS_SAMPLING_ARITHMETIC_MEAN = 0x02,
+	ESS_SAMPLING_RMS = 0x03,
+	ESS_SAMPLING_MAXIMUM = 0x04,
+	ESS_SAMPLING_MINIMUM = 0x05,
+	ESS_SAMPLING_ACCUMULATED = 0x06,
+	ESS_SAMPLING_COUNT = 0x07,
+};
 
 /* ES Measurement Descriptor - Applications - Bluetooth SIG standard */
-#define ESS_DESC_APP_UNSPECIFIED 0x00
-#define ESS_DESC_APP_AIR         0x01
-#define ESS_DESC_APP_OUTDOOR     0x13
-#define ESS_DESC_APP_INDOOR      0x14
+enum ess_application {
+	ESS_APP_UNSPECIFIED = 0x00,
+	ESS_APP_AIR = 0x01,
+	ESS_APP_OUTDOOR = 0x13,
+	ESS_APP_INDOOR = 0x14,
+};
+
+_Static_assert((int)ESS_TRIGGER_NOT_EQUAL_TO_REF_VALUE <= UINT8_MAX,
+	       "ess_trigger_condition must fit in uint8_t for BLE wire format");
+_Static_assert((int)ESS_SAMPLING_COUNT <= UINT8_MAX,
+	       "ess_sampling_func must fit in uint8_t for BLE wire format");
+_Static_assert((int)ESS_APP_INDOOR <= UINT8_MAX,
+	       "ess_application must fit in uint8_t for BLE wire format");
 
 #define BT_UUID_CO2_CONCENTRATION_VAL  0x2B8C
 #define BT_UUID_TVOC_CONCENTRATION_VAL 0x2BE7
@@ -68,27 +81,27 @@ LOG_MODULE_REGISTER(ess_service, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* Environmental Sensing Service measurements - Bluetooth SIG ESS Standard */
 struct es_measurement {
-	uint16_t flags;        /* Reserved for Future Use - always 0x0000 per SIG spec */
-	uint8_t sampling_func; /* Sampling Function field - how the measurement is obtained:
-				* 0x00 = Unspecified
-				* 0x01 = Instantaneous (single point-in-time measurement)
-				* 0x02 = Arithmetic Mean (average over measurement period)
-				* 0x03 = RMS (root mean square over measurement period)
-				* 0x04 = Maximum (peak value over measurement period)
-				* 0x05 = Minimum (lowest value over measurement period)
-				* 0x06 = Accumulated (cumulative sum over measurement period)
-				* 0x07 = Count (number of measurements in measurement period) */
-	uint32_t meas_period;  /* Measurement Period - time in seconds over which sampling occurs:
-				* 0x000000 = Not applicable (for instantaneous measurements)
-				* 0x000001-0xFFFFFF = Period in seconds (1 sec to ~194 days) */
-	uint32_t update_interval; /* Update Interval - time in seconds between measurements:
-				   * 0x000000 = Not applicable (for on-demand/event-driven updates)
-				   * 0x000001-0xFFFFFF = Interval in seconds (1 sec to ~194 days) */
-	uint8_t application;      /* Application field - describes measurement context:
-				   * 0x00 = Unspecified
-				   * 0x01 = Air (atmospheric/ambient air measurements)
-				   * 0x13 = Outdoor (external environmental conditions)
-				   * 0x14 = Indoor (internal environmental conditions) */
+	uint16_t flags; /* Reserved for Future Use - always 0x0000 per SIG spec */
+	enum ess_sampling_func sampling_func; /* Sampling Function field:
+					       * ESS_SAMPLING_UNSPECIFIED    = 0x00
+					       * ESS_SAMPLING_INSTANTANEOUS  = 0x01
+					       * ESS_SAMPLING_ARITHMETIC_MEAN = 0x02
+					       * ESS_SAMPLING_RMS            = 0x03
+					       * ESS_SAMPLING_MAXIMUM        = 0x04
+					       * ESS_SAMPLING_MINIMUM        = 0x05
+					       * ESS_SAMPLING_ACCUMULATED    = 0x06
+					       * ESS_SAMPLING_COUNT          = 0x07 */
+	uint32_t meas_period; /* Measurement Period - time in seconds over which sampling occurs:
+			       * 0x000000 = Not applicable (for instantaneous measurements)
+			       * 0x000001-0xFFFFFF = Period in seconds (1 sec to ~194 days) */
+	uint32_t update_interval;         /* Update Interval - time in seconds between measurements:
+					   * 0x000000 = Not applicable (for on-demand/event-driven updates)
+					   * 0x000001-0xFFFFFF = Interval in seconds (1 sec to ~194 days) */
+	enum ess_application application; /* Application field:
+					   * ESS_APP_UNSPECIFIED = 0x00
+					   * ESS_APP_AIR         = 0x01
+					   * ESS_APP_OUTDOOR     = 0x13
+					   * ESS_APP_INDOOR      = 0x14 */
 	uint8_t meas_uncertainty; /* Measurement Uncertainty - accuracy/precision information:
 				   * Expressed in same units as the measurement
 				   * Represents ± uncertainty range (e.g., ±0.5°C = 0x32 for temp)
@@ -105,14 +118,14 @@ struct ess_sensor {
 			      * TVOC: 1 ppb resolution (0 = 0 ppb) */
 	int32_t lower_limit; /* Valid Range Lower Limit - minimum acceptable value */
 	int32_t upper_limit; /* Valid Range Upper Limit - maximum acceptable value */
-	uint8_t condition;   /* Trigger Setting Condition - when to send notifications:
-			      * ESS_TRIGGER_INACTIVE = No notifications
-			      * ESS_TRIGGER_VALUE_CHANGED = Notify on any value change
-			      * ESS_TRIGGER_LESS_THAN_REF_VALUE = Notify when < ref_val
-			      * ESS_TRIGGER_GREATER_THAN_REF_VALUE = Notify when > ref_val
-			      * etc. (see ESS_TRIGGER_* macros above) */
-	int32_t ref_val;     /* Trigger Setting Reference Value - comparison value for conditional
-				triggers */
+	enum ess_trigger_condition condition; /* Trigger Setting Condition:
+					       * ESS_TRIGGER_INACTIVE
+					       * ESS_TRIGGER_VALUE_CHANGED
+					       * ESS_TRIGGER_LESS_THAN_REF_VALUE
+					       * ESS_TRIGGER_GREATER_THAN_REF_VALUE
+					       * etc. (see enum ess_trigger_condition) */
+	int32_t ref_val; /* Trigger Setting Reference Value - comparison value for conditional
+			    triggers */
 	struct es_measurement
 		meas;        /* ES Measurement Descriptor - describes how measurement is obtained */
 	bool notify_enabled; /* Client Characteristic Configuration - true if client enabled
@@ -120,8 +133,20 @@ struct ess_sensor {
 };
 
 /* ESS sensors state */
+
+/* Initial/default sensor values and measurement uncertainty values (used in static initializers,
+ * must be #define or enum -- not static const -- for file-scope struct initialization in C) */
+#define ESS_TEMP_DEFAULT_CDEG     2000   /* 20.00°C in 0.01°C units */
+#define ESS_HUM_DEFAULT_CPCNT     5000   /* 50.00% in 0.01% units */
+#define ESS_PRESS_DEFAULT_DPASCAL 101325 /* 1013.25 hPa in 0.1 Pa units */
+#define ESS_TEMP_UNCERTAINTY      0x32U  /* 50 x 0.01°C = ±0.50°C */
+#define ESS_HUM_UNCERTAINTY       0x32U  /* 50 x 0.01% = ±0.50%RH */
+#define ESS_PRESS_UNCERTAINTY     0x96U  /* 150 x 0.1 Pa = ±15.0 Pa */
+#define ESS_CO2_UNCERTAINTY       0x64U  /* 100 ppm */
+#define ESS_TVOC_UNCERTAINTY      0x32U  /* 50 ppb */
+
 static struct ess_sensor temperature_sensor = {
-	.value = 2000, /* 20.00°C in 0.01°C units */
+	.value = ESS_TEMP_DEFAULT_CDEG, /* 20.00°C in 0.01°C units */
 	.lower_limit = TEMP_LOWER_LIMIT,
 	.upper_limit = TEMP_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -129,17 +154,17 @@ static struct ess_sensor temperature_sensor = {
 	.meas =
 		{
 			.flags = 0,
-			.sampling_func = ESS_DESC_SAMPLING_INSTANTANEOUS,
+			.sampling_func = ESS_SAMPLING_INSTANTANEOUS,
 			.meas_period = 0x00,     /* On-demand readings */
 			.update_interval = 0x00, /* No fixed interval - read on demand */
-			.application = ESS_DESC_APP_INDOOR,
-			.meas_uncertainty = 0x32, /* ±0.50°C in 0.01°C units (50) */
+			.application = ESS_APP_INDOOR,
+			.meas_uncertainty = ESS_TEMP_UNCERTAINTY, /* ±0.50°C in 0.01°C units (50) */
 		},
 	.notify_enabled = false,
 };
 
 static struct ess_sensor humidity_sensor = {
-	.value = 5000, /* 50.00% in 0.01% units */
+	.value = ESS_HUM_DEFAULT_CPCNT, /* 50.00% in 0.01% units */
 	.lower_limit = HUMIDITY_LOWER_LIMIT,
 	.upper_limit = HUMIDITY_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -147,17 +172,17 @@ static struct ess_sensor humidity_sensor = {
 	.meas =
 		{
 			.flags = 0,
-			.sampling_func = ESS_DESC_SAMPLING_INSTANTANEOUS,
+			.sampling_func = ESS_SAMPLING_INSTANTANEOUS,
 			.meas_period = 0x00,     /* On-demand readings */
 			.update_interval = 0x00, /* No fixed interval - read on demand */
-			.application = ESS_DESC_APP_INDOOR,
-			.meas_uncertainty = 0x32, /* ±0.50%RH in 0.01% units (50) */
+			.application = ESS_APP_INDOOR,
+			.meas_uncertainty = ESS_HUM_UNCERTAINTY, /* ±0.50%RH in 0.01% units (50) */
 		},
 	.notify_enabled = false,
 };
 
 static struct ess_sensor pressure_sensor = {
-	.value = 101325, /* 1013.25 hPa = 101325 Pa in 0.1 Pa units */
+	.value = ESS_PRESS_DEFAULT_DPASCAL, /* 1013.25 hPa = 101325 Pa in 0.1 Pa units */
 	.lower_limit = PRESSURE_LOWER_LIMIT,
 	.upper_limit = PRESSURE_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -165,12 +190,13 @@ static struct ess_sensor pressure_sensor = {
 	.meas =
 		{
 			.flags = 0,
-			.sampling_func = ESS_DESC_SAMPLING_INSTANTANEOUS,
+			.sampling_func = ESS_SAMPLING_INSTANTANEOUS,
 			.meas_period = 0x00,     /* On-demand readings */
 			.update_interval = 0x00, /* No fixed interval - read on demand */
-			.application = ESS_DESC_APP_INDOOR,
-			.meas_uncertainty = 0x96, /* ±15.0 Pa in 0.1 Pa units (150 * 0.1 Pa = 15.0
-						     Pa = 0.15 hPa) */
+			.application = ESS_APP_INDOOR,
+			.meas_uncertainty =
+				ESS_PRESS_UNCERTAINTY, /* ±15.0 Pa in 0.1 Pa units (150
+							* 0.1 Pa = 15.0 Pa = 0.15 hPa) */
 		},
 	.notify_enabled = false,
 };
@@ -184,11 +210,11 @@ static struct ess_sensor co2_sensor = {
 	.meas =
 		{
 			.flags = 0,
-			.sampling_func = ESS_DESC_SAMPLING_INSTANTANEOUS,
+			.sampling_func = ESS_SAMPLING_INSTANTANEOUS,
 			.meas_period = 0x00,     /* On-demand readings - no averaging period */
 			.update_interval = 0x00, /* No fixed interval - read on demand */
-			.application = ESS_DESC_APP_AIR,
-			.meas_uncertainty = 0x64, /* ±100 ppm (typical for CCS811) */
+			.application = ESS_APP_AIR,
+			.meas_uncertainty = ESS_CO2_UNCERTAINTY, /* ±100 ppm (typical for CCS811) */
 		},
 	.notify_enabled = false,
 };
@@ -202,11 +228,12 @@ static struct ess_sensor tvoc_sensor = {
 	.meas =
 		{
 			.flags = 0,
-			.sampling_func = ESS_DESC_SAMPLING_INSTANTANEOUS,
+			.sampling_func = ESS_SAMPLING_INSTANTANEOUS,
 			.meas_period = 0x00,     /* On-demand readings - no averaging period */
 			.update_interval = 0x00, /* No fixed interval - read on demand */
-			.application = ESS_DESC_APP_AIR,
-			.meas_uncertainty = 0x32, /* ±50 ppb (reasonable for TVOC sensor) */
+			.application = ESS_APP_AIR,
+			.meas_uncertainty =
+				ESS_TVOC_UNCERTAINTY, /* ±50 ppb (reasonable for TVOC sensor) */
 		},
 	.notify_enabled = false,
 };
@@ -214,16 +241,26 @@ static struct ess_sensor tvoc_sensor = {
 static bool ess_initialized = false;
 
 /* GATT attribute indices for characteristics */
-#define TEMP_CHAR_ATTR_IDX     1  /* Temperature characteristic */
-#define HUMIDITY_CHAR_ATTR_IDX 7  /* Humidity characteristic */
-#define PRESSURE_CHAR_ATTR_IDX 13 /* Pressure characteristic */
-#define CO2_CHAR_ATTR_IDX      19 /* CO2 characteristic */
-#define TVOC_CHAR_ATTR_IDX     25 /* TVOC characteristic */
+enum ess_char_attr_idx {
+	ESS_ATTR_IDX_TEMPERATURE = 1, /* Temperature characteristic */
+	ESS_ATTR_IDX_HUMIDITY = 7,    /* Humidity characteristic */
+	ESS_ATTR_IDX_PRESSURE = 13,   /* Pressure characteristic */
+	ESS_ATTR_IDX_CO2 = 19,        /* CO2 characteristic */
+	ESS_ATTR_IDX_TVOC = 25,       /* TVOC characteristic */
+};
+
+/* ESS sensor conversion scale factors and conditioning constants */
+static const float ESS_TEMP_SCALE = 100.0f;             /* °C to 0.01°C units */
+static const float ESS_HUM_SCALE = 100.0f;              /* % to 0.01% units */
+static const float ESS_PRESS_HPA_TO_DPASCAL = 1000.0f;  /* hPa to 0.1 Pa units */
+static const uint32_t ESS_INT16_MASK = 0xFFFFU;         /* Mask for int16_t range */
+static const int64_t CCS811_CONDITIONING_MS = 300000LL; /* 5-minute conditioning in ms */
+static const int64_t ESS_MS_PER_SEC = 1000LL;           /* Milliseconds per second */
 
 /* Conversion helper functions - centralized data conversion logic */
 static int16_t convert_temperature_to_ble(float temp_celsius)
 {
-	int16_t result = (int16_t)(temp_celsius * 100); /* Convert to 0.01°C units */
+	int16_t result = (int16_t)(temp_celsius * ESS_TEMP_SCALE); /* Convert to 0.01°C units */
 	LOG_DBG("Temperature conversion: %.2f°C -> %d (0.01°C units)", (double)temp_celsius,
 		result);
 	return result;
@@ -231,7 +268,7 @@ static int16_t convert_temperature_to_ble(float temp_celsius)
 
 static uint16_t convert_humidity_to_ble(float humidity_percent)
 {
-	uint16_t result = (uint16_t)(humidity_percent * 100); /* Convert to 0.01% units */
+	uint16_t result = (uint16_t)(humidity_percent * ESS_HUM_SCALE); /* Convert to 0.01% units */
 	LOG_DBG("Humidity conversion: %.2f%% -> %u (0.01%% units)", (double)humidity_percent,
 		result);
 	return result;
@@ -240,7 +277,7 @@ static uint16_t convert_humidity_to_ble(float humidity_percent)
 static uint32_t convert_pressure_to_ble(float pressure_hpa)
 {
 	/* Convert hPa to Pa with 0.1 Pa resolution: hPa * 100 / 0.1 = hPa * 1000 */
-	uint32_t pressure_pa = (uint32_t)(pressure_hpa * 1000);
+	uint32_t pressure_pa = (uint32_t)(pressure_hpa * ESS_PRESS_HPA_TO_DPASCAL);
 
 	/* Clamp to valid range */
 	if (pressure_pa < PRESSURE_LOWER_LIMIT) {
@@ -299,7 +336,7 @@ static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 	}
 
 	/* Ensure value is within int16_t range before conversion */
-	int16_t value = (int16_t)(*value_ptr & 0xFFFF);
+	int16_t value = (int16_t)(*value_ptr & ESS_INT16_MASK);
 	uint16_t le_value = sys_cpu_to_le16((uint16_t)value);
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, &le_value, sizeof(le_value));
@@ -359,11 +396,14 @@ static ssize_t read_u32(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, &le_value, sizeof(le_value));
 }
 
+/* BLE ES Measurement Descriptor wire format sizes */
+#define ESS_BLE_24BIT_FIELD_LEN 3U /* 24-bit fields use 3 bytes in little-endian BLE format */
+
 struct read_es_measurement_rp {
 	uint16_t flags; /* Reserved for Future Use */
 	uint8_t sampling_function;
-	uint8_t measurement_period[3];
-	uint8_t update_interval[3];
+	uint8_t measurement_period[ESS_BLE_24BIT_FIELD_LEN];
+	uint8_t update_interval[ESS_BLE_24BIT_FIELD_LEN];
 	uint8_t application;
 	uint8_t measurement_uncertainty;
 } __packed;
@@ -375,10 +415,10 @@ static ssize_t read_es_measurement(struct bt_conn *conn, const struct bt_gatt_at
 	struct read_es_measurement_rp rsp;
 
 	rsp.flags = sys_cpu_to_le16(value->flags);
-	rsp.sampling_function = value->sampling_func;
+	rsp.sampling_function = (uint8_t)value->sampling_func;
 	sys_put_le24(value->meas_period, rsp.measurement_period);
 	sys_put_le24(value->update_interval, rsp.update_interval);
-	rsp.application = value->application;
+	rsp.application = (uint8_t)value->application;
 	rsp.measurement_uncertainty = value->meas_uncertainty;
 
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, &rsp, sizeof(rsp));
@@ -496,7 +536,8 @@ BT_GATT_SERVICE_DEFINE(
 	BT_GATT_CCC(tvoc_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), );
 
 /* Helper function to check if notification should be sent for 16-bit values */
-static bool should_notify_16(uint8_t condition, int16_t old_val, int16_t new_val, int16_t ref_val)
+static bool should_notify_16(enum ess_trigger_condition condition, int16_t old_val, int16_t new_val,
+			     int16_t ref_val)
 {
 	switch (condition) {
 	case ESS_TRIGGER_INACTIVE:
@@ -521,7 +562,8 @@ static bool should_notify_16(uint8_t condition, int16_t old_val, int16_t new_val
 }
 
 /* Helper function to check if notification should be sent for 32-bit values */
-static bool should_notify_32(uint8_t condition, int32_t old_val, int32_t new_val, int32_t ref_val)
+static bool should_notify_32(enum ess_trigger_condition condition, int32_t old_val, int32_t new_val,
+			     int32_t ref_val)
 {
 	switch (condition) {
 	case ESS_TRIGGER_INACTIVE:
@@ -646,52 +688,52 @@ int ess_service_update(const struct sensor_data *data)
 	LOG_DBG("Updating ESS with sensor data");
 
 	/* Update temperature (convert from °C to 0.01°C as per Bluetooth SIG spec) */
-	if (data->temperature_valid) {
+	if ((data->valid_mask & SENSOR_TEMPERATURE) != 0) {
 		int16_t temp_value = convert_temperature_to_ble(data->temperature);
 		update_sensor_i16(&temperature_sensor, temp_value,
-				  &ess_svc.attrs[TEMP_CHAR_ATTR_IDX]);
+				  &ess_svc.attrs[ESS_ATTR_IDX_TEMPERATURE]);
 	}
 
 	/* Update humidity using centralized conversion */
-	if (data->humidity_valid) {
+	if ((data->valid_mask & SENSOR_HUMIDITY) != 0) {
 		uint16_t humid_value = convert_humidity_to_ble(data->humidity);
 		update_sensor_u16(&humidity_sensor, humid_value,
-				  &ess_svc.attrs[HUMIDITY_CHAR_ATTR_IDX]);
+				  &ess_svc.attrs[ESS_ATTR_IDX_HUMIDITY]);
 	}
 
 	/* Update pressure using centralized conversion */
-	if (data->pressure_valid) {
+	if ((data->valid_mask & SENSOR_PRESSURE) != 0) {
 		uint32_t pressure_pa = convert_pressure_to_ble(data->pressure);
 		update_sensor_u32(&pressure_sensor, pressure_pa,
-				  &ess_svc.attrs[PRESSURE_CHAR_ATTR_IDX]);
+				  &ess_svc.attrs[ESS_ATTR_IDX_PRESSURE]);
 	}
 
 	/* Update CO2 concentration using centralized conversion */
-	if (data->eco2_valid && sensor_manager_is_ccs811_ready()) {
+	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0 && sensor_manager_is_ccs811_ready()) {
 		/* CCS811 is ready and data is valid - use real reading */
 		uint16_t co2_value = convert_co2_to_ble(data->eco2);
-		update_sensor_u16(&co2_sensor, co2_value, &ess_svc.attrs[CO2_CHAR_ATTR_IDX]);
+		update_sensor_u16(&co2_sensor, co2_value, &ess_svc.attrs[ESS_ATTR_IDX_CO2]);
 	} else if (!sensor_manager_is_ccs811_ready()) {
 		/* CCS811 is still conditioning - show 0 ppm to indicate sensor not ready */
 		uint16_t co2_value = convert_co2_to_ble(0);
-		update_sensor_u16(&co2_sensor, co2_value, &ess_svc.attrs[CO2_CHAR_ATTR_IDX]);
+		update_sensor_u16(&co2_sensor, co2_value, &ess_svc.attrs[ESS_ATTR_IDX_CO2]);
 	}
 	/* If sensor is ready but data invalid, keep last valid reading */
 
 	/* Update TVOC concentration using centralized conversion */
-	if (data->tvoc_valid && sensor_manager_is_ccs811_ready()) {
+	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0 && sensor_manager_is_ccs811_ready()) {
 		/* CCS811 is ready and data is valid - use real reading */
 		uint16_t tvoc_value = convert_tvoc_to_ble(data->tvoc);
-		update_sensor_u16(&tvoc_sensor, tvoc_value, &ess_svc.attrs[TVOC_CHAR_ATTR_IDX]);
+		update_sensor_u16(&tvoc_sensor, tvoc_value, &ess_svc.attrs[ESS_ATTR_IDX_TVOC]);
 	} else if (!sensor_manager_is_ccs811_ready()) {
 		/* CCS811 is still conditioning - show 0 ppb to indicate sensor not ready */
 		uint16_t tvoc_value = convert_tvoc_to_ble(0);
-		update_sensor_u16(&tvoc_sensor, tvoc_value, &ess_svc.attrs[TVOC_CHAR_ATTR_IDX]);
+		update_sensor_u16(&tvoc_sensor, tvoc_value, &ess_svc.attrs[ESS_ATTR_IDX_TVOC]);
 	}
 	/* If sensor is ready but data invalid, keep last valid reading */
 
 	/* Log current values - show conditioning status for gas sensors */
-	if (data->eco2_valid && data->tvoc_valid) {
+	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0) {
 		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.1fhPa(%.0fPa), CO2=%dppm, TVOC=%dppb",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
 			(double)(data->pressure * 100), data->eco2, data->tvoc);
@@ -701,7 +743,8 @@ int ess_service_update(const struct sensor_data *data)
 			(double)(data->pressure * 100));
 	} else {
 		int64_t elapsed = k_uptime_get();
-		int64_t remaining_sec = (300000LL - elapsed) / 1000LL; /* 5 min conditioning */
+		int64_t remaining_sec = (CCS811_CONDITIONING_MS - elapsed) /
+					ESS_MS_PER_SEC; /* 5 min conditioning */
 		if (remaining_sec > 0) {
 			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.1fhPa(%.0fPa), "
 				"CO2/TVOC=conditioning(%ds)",

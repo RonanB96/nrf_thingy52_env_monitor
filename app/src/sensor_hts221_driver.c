@@ -16,12 +16,15 @@
 #include "sensor_hts221_driver.h"
 
 /* Include ST's official HTS221 register API */
-#include "../../modules/zephyr/drivers/sensor/st/hts221/hts221.h"
+#include "hts221.h"
 
 LOG_MODULE_REGISTER(sensor_hts221_driver, CONFIG_LOG_DEFAULT_LEVEL);
 
 /* Device tree node */
 #define HTS221_NODE DT_NODELABEL(hts221)
+
+static const uint32_t HTS221_ONE_SHOT_STABILIZATION_MS = 20U;
+static const uint32_t HTS221_DRDY_TIMEOUT_MS = 100U; /* Data ready semaphore timeout */
 
 /* Static variables */
 static const struct device *hts221_dev;
@@ -148,7 +151,8 @@ int hts221_driver_read_humidity(float *humidity)
 
 int hts221_driver_read_both(float *temperature, float *humidity)
 {
-	struct sensor_value temp_val, hum_val;
+	struct sensor_value temp_val;
+	struct sensor_value hum_val;
 	int ret;
 
 	if (!hts221_dev || (!temperature && !humidity)) {
@@ -168,7 +172,7 @@ int hts221_driver_read_both(float *temperature, float *humidity)
 	}
 
 	/* Wait for sensor stabilization */
-	k_msleep(20);
+	k_msleep((int32_t)HTS221_ONE_SHOT_STABILIZATION_MS);
 
 	/* Trigger one-shot measurement using ST register API */
 	ret = hts221_one_shoot_trigger_set(stm_ctx, PROPERTY_ENABLE);
@@ -178,7 +182,7 @@ int hts221_driver_read_both(float *temperature, float *humidity)
 	}
 
 	/* Wait for data ready interrupt (with timeout) */
-	ret = k_sem_take(&hts221_data_ready_sem, K_MSEC(100));
+	ret = k_sem_take(&hts221_data_ready_sem, K_MSEC(HTS221_DRDY_TIMEOUT_MS));
 	if (ret != 0) {
 		LOG_ERR("HTS221 measurement timeout waiting for interrupt");
 		ret = -ETIMEDOUT;

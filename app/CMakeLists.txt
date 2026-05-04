@@ -29,5 +29,8 @@ target_include_directories(app PRIVATE include)
 
 # Add ST register API includes for HTS221 direct register access
 target_include_directories(app PRIVATE $ENV{ZEPHYR_BASE}/drivers/sensor/st/stmemsc)
+target_include_directories(app PRIVATE ${CMAKE_SOURCE_DIR}/../modules/zephyr/drivers/sensor/st/hts221)
+target_include_directories(app PRIVATE ${CMAKE_SOURCE_DIR}/../modules/zephyr/drivers/sensor/st/lps22hb)
+target_include_directories(app PRIVATE ${CMAKE_SOURCE_DIR}/../modules/zephyr/drivers/sensor/ams/ccs811)
 
 # NORDIC SDK APP END

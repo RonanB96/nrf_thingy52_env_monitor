@@ -18,7 +18,6 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/hwinfo.h>
-#include <zephyr/sys/printk.h>
 #include "ble_advertiser.h"
 #include "device_naming.h"
 
@@ -43,6 +42,17 @@ enum ad_data_index {
 /* Advertising state */
 static bool advertising_enabled = false;
 
+/* Timing and retry constants */
+#define BLE_DEVICE_ID_LEN        8U     /* hwinfo device ID buffer size */
+#define BLE_DEVICE_ID_BYTES_USED 4U     /* Bytes of HW ID used for unique name */
+#define BLE_DEVICE_NAME_LEN      32U    /* Max device name buffer size */
+#define BLE_BITS_PER_BYTE        8U     /* Bits in one byte (== CHAR_BIT) for packing loops */
+static const int BLE_ADV_RETRY_MAX = 5; /* Max advertising start retries */
+static const uint32_t BLE_CONTROLLER_INIT_DELAY_MS = 500U; /* Controller init settle time */
+static const uint32_t BLE_ADV_STOP_DELAY_MS = 100U;   /* Delay after stopping adv before restart */
+static const uint32_t BLE_ADV_BACKOFF_BASE_MS = 200U; /* Initial backoff for EAGAIN retry */
+static const uint32_t BLE_ADV_BACKOFF_STEP_MS = 100U; /* Additional backoff per retry */
+
 /* Bluetooth ready synchronization */
 static K_SEM_DEFINE(bt_ready_sem, 0, 1);
 
@@ -65,6 +75,9 @@ static struct bt_data ad_data[] = {
 	/* Appearance: Multi-Sensor (0x0552) */
 	BT_DATA_BYTES(BT_DATA_GAP_APPEARANCE, BT_UUID_16_ENCODE(BT_APPEARANCE_SENSOR_MULTI)),
 };
+
+BUILD_ASSERT(ARRAY_SIZE(ad_data) == AD_DATA_COUNT,
+	     "ad_data array size does not match AD_DATA_COUNT enum sentinel");
 
 static void ble_disconnected(struct bt_conn *conn, uint8_t reason)
 {
@@ -123,20 +136,22 @@ static void generate_unique_device_name(char *name_buffer, size_t buffer_size)
 
 	if (ret != 0) {
 		/* Fallback if device naming service unavailable */
-		uint8_t device_id[8];
+		uint8_t device_id[BLE_DEVICE_ID_LEN];
 		ssize_t id_len = hwinfo_get_device_id(device_id, sizeof(device_id));
 
 		if (id_len > 0) {
 			uint32_t unique_id = 0;
-			size_t bytes_to_use = MIN(4, id_len);
+			size_t bytes_to_use = MIN(BLE_DEVICE_ID_BYTES_USED, (size_t)id_len);
 
 			for (size_t i = 0; i < bytes_to_use; i++) {
-				unique_id = (unique_id << 8) | device_id[id_len - 1 - i];
+				unique_id = (unique_id << BLE_BITS_PER_BYTE) |
+					    device_id[id_len - 1 - i];
 			}
 
-			snprintf(name_buffer, buffer_size, "%s-%08X", DEVICE_PREFIX, unique_id);
+			(void)snprintf(name_buffer, buffer_size, "%s-%08X", DEVICE_PREFIX,
+				       unique_id);
 		} else {
-			strncpy(name_buffer, DEVICE_PREFIX "-00000000", buffer_size - 1);
+			(void)strncpy(name_buffer, DEVICE_PREFIX "-00000000", buffer_size - 1);
 			name_buffer[buffer_size - 1] = '\0';
 		}
 	}
@@ -147,7 +162,7 @@ static void generate_unique_device_name(char *name_buffer, size_t buffer_size)
 static int update_advertisement_data(const struct ble_sensor_data *data)
 {
 	/* Generate unique device name */
-	static char device_name[32];
+	static char device_name[BLE_DEVICE_NAME_LEN];
 	static bool name_generated = false;
 
 	if (!name_generated) {
@@ -183,18 +198,18 @@ int ble_advertiser_init(void)
 {
 	int ret;
 
-	printk("Initializing BLE advertiser\n");
+	LOG_INF("Initializing BLE advertiser");
 
 	/* Enable Bluetooth with callback - all BLE operations happen in callback */
 	ret = bt_enable(bt_ready_cb);
 	if (ret) {
-		printk("Bluetooth init failed: %d\n", ret);
+		LOG_ERR("Bluetooth init failed: %d", ret);
 		return ret;
 	}
 
 	bt_conn_cb_register(&conn_callbacks);
 
-	printk("BLE advertiser initialization started - waiting for Bluetooth ready\n");
+	LOG_INF("BLE advertiser initialization started - waiting for Bluetooth ready");
 	return 0;
 }
 int ble_advertiser_start(const struct ble_sensor_data *data)
@@ -219,7 +234,7 @@ int ble_advertiser_start(const struct ble_sensor_data *data)
 	update_advertisement_data(data);
 
 	/* Give the Bluetooth controller extra time to fully initialize */
-	k_msleep(500);
+	k_msleep((int32_t)BLE_CONTROLLER_INIT_DELAY_MS);
 
 	/* Stop any existing advertising first */
 	if (advertising_enabled) {
@@ -229,12 +244,12 @@ int ble_advertiser_start(const struct ble_sensor_data *data)
 			LOG_WRN("Failed to stop existing advertising: %d", ret);
 		}
 		advertising_enabled = false;
-		k_msleep(100); /* Give time for stop to complete */
+		k_msleep((int32_t)BLE_ADV_STOP_DELAY_MS); /* Give time for stop to complete */
 	}
 
 	/* Start legacy advertising with retry logic */
 	LOG_INF("Starting BLE legacy advertising...");
-	for (int retry = 0; retry < 5; retry++) {
+	for (int retry = 0; retry < BLE_ADV_RETRY_MAX; retry++) {
 		ret = bt_le_adv_start(&adv_param, ad_data, ARRAY_SIZE(ad_data), NULL, 0);
 		if (ret == 0) {
 			advertising_enabled = true;
@@ -249,7 +264,9 @@ int ble_advertiser_start(const struct ble_sensor_data *data)
 			retry + 1);
 		if (ret == -EAGAIN) {
 			/* Bluetooth busy, wait longer and retry */
-			k_msleep(200 + (100 * retry)); /* Longer backoff */
+			k_msleep((int32_t)(BLE_ADV_BACKOFF_BASE_MS +
+					   (BLE_ADV_BACKOFF_STEP_MS *
+					    (uint32_t)retry))); /* Longer backoff */
 			continue;
 		} else {
 			/* Other error, don't retry */

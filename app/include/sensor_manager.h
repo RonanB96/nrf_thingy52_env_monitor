@@ -60,14 +60,11 @@ struct sensor_data {
 	/* Timestamp of last update */
 	int64_t timestamp;
 
-	/* Data validity flags */
-	bool temperature_valid;
-	bool humidity_valid;
-	bool pressure_valid;
-	bool eco2_valid;
-	bool tvoc_valid;
-	bool battery_valid;
+	/* Bitmask of valid sensor readings */
+	enum sensor_select valid_mask;
 };
+
+#define SENSOR_DATA_IS_VALID(data, flag) (((data)->valid_mask & (flag)) != 0U)
 
 /**
  * @brief Sensor update callback function type

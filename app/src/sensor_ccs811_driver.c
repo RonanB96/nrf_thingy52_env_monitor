@@ -18,7 +18,7 @@
 #include <math.h>
 
 /* Include CCS811 driver internals for register definitions and mode constants */
-#include "../../../../modules/zephyr/drivers/sensor/ams/ccs811/ccs811.h"
+#include "ccs811.h"
 
 LOG_MODULE_REGISTER(ccs811_driver, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -29,11 +29,18 @@ static bool ccs811_conditioning_complete = false;
 static int64_t ccs811_init_time = 0;
 
 /* CCS811 timing constants */
-#define CCS811_CONDITIONING_TIME_MS  (20 * 60 * 1000) /* 20 minutes */
-#define CCS811_RESET_DELAY_MS        1                /* Reset assertion time */
-#define CCS811_BOOT_DELAY_MS         20               /* Boot completion time */
-#define CCS811_WAKE_DELAY_US         20               /* t_DWAKE specification */
-#define CCS811_STATUS_CHECK_DELAY_MS 100              /* Status check delay */
+static const uint32_t CCS811_CONDITIONING_TIME_MS = (20U * 60U * 1000U); /* 20 minutes */
+static const uint32_t CCS811_RESET_DELAY_MS = 1U;                        /* Reset assertion time */
+static const uint32_t CCS811_BOOT_DELAY_MS = 20U;                        /* Boot completion time */
+static const uint32_t CCS811_WAKE_DELAY_US = 20U;                        /* t_DWAKE specification */
+static const uint32_t CCS811_STATUS_CHECK_DELAY_MS = 100U;               /* Status check delay */
+static const uint32_t CCS811_IDLE_WAKE_DELAY_MS =
+	1500U;                                        /* Wait for first 1s measurement after wake */
+static const uint32_t CCS811_MUTEX_TIMEOUT_MS = 500U; /* Mutex acquire timeout */
+static const float CCS811_ENV_TEMP_MIN_C = -40.0f;  /* Min valid temperature for env compensation */
+static const float CCS811_ENV_TEMP_MAX_C = 85.0f;   /* Max valid temperature for env compensation */
+static const float CCS811_ENV_HUM_MAX_PCT = 100.0f; /* Max valid humidity for env compensation */
+static const float CCS811_SENSOR_VAL_FRAC = 1000000.0f; /* Zephyr sensor_value fractional divisor */
 
 /* Adaptive sampling state */
 static bool first_sample_obtained;
@@ -48,8 +55,8 @@ static bool ccs811_in_idle_mode;
 static uint16_t stored_baseline;
 static int64_t last_baseline_save;
 static int64_t last_baseline_load;
-#define BASELINE_SAVE_INTERVAL_MS (24 * 60 * 60 * 1000)     /* 24 hours */
-#define BASELINE_LOAD_INTERVAL_MS (7 * 24 * 60 * 60 * 1000) /* 7 days */
+static const int64_t BASELINE_SAVE_INTERVAL_MS = (24LL * 60LL * 60LL * 1000LL);       /* 24 hours */
+static const int64_t BASELINE_LOAD_INTERVAL_MS = (7LL * 24LL * 60LL * 60LL * 1000LL); /* 7 days */
 
 #define CCS811_SETTINGS_KEY "ccs811/baseline"
 
@@ -242,15 +249,15 @@ int ccs811_driver_manual_reset(void)
 		/* Reset sequence: reset low, wake low (awake), then reset high */
 		gpio_pin_set_dt(&config->reset_gpio, 0); /* Assert reset (active low) */
 		gpio_pin_set_dt(&config->wake_gpio, 0);  /* Keep awake (active low wake) */
-		k_msleep(CCS811_RESET_DELAY_MS);
+		k_msleep((int32_t)CCS811_RESET_DELAY_MS);
 
 		gpio_pin_set_dt(&config->reset_gpio, 1); /* Release reset */
-		k_msleep(CCS811_BOOT_DELAY_MS);          /* Wait for sensor to boot */
+		k_msleep((int32_t)CCS811_BOOT_DELAY_MS); /* Wait for sensor to boot */
 
 		LOG_INF("Manual reset sequence completed");
 
 		/* Check status after reset */
-		k_msleep(CCS811_STATUS_CHECK_DELAY_MS);
+		k_msleep((int32_t)CCS811_STATUS_CHECK_DELAY_MS);
 		const struct ccs811_result_type *post_reset_result = ccs811_result(ccs811_dev);
 		if (post_reset_result) {
 			LOG_INF("CCS811 after manual reset: status=0x%02x, FW_MODE=%d, "
@@ -278,7 +285,10 @@ bool ccs811_driver_is_enabled(void)
 int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float temp_celsius,
 				   float humidity_percent)
 {
-	struct sensor_value temp_val, hum_val, co2_val, tvoc_val;
+	struct sensor_value temp_val;
+	struct sensor_value hum_val;
+	struct sensor_value co2_val;
+	struct sensor_value tvoc_val;
 	int ret = 0;
 	bool mutex_locked = false;
 	bool woke_sensor = false;
@@ -326,8 +336,8 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 			woke_sensor = true;
 			/* Wait 1.5s for the first 1-second measurement to complete */
 			k_mutex_unlock(&ccs811_mutex);
-			k_msleep(1500);
-			ret = k_mutex_lock(&ccs811_mutex, K_MSEC(500));
+			k_msleep((int32_t)CCS811_IDLE_WAKE_DELAY_MS);
+			ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
 			if (ret != 0) {
 				LOG_ERR("Failed to re-acquire CCS811 mutex after wake: %d", ret);
 				woke_sensor = false;
@@ -340,16 +350,19 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 	}
 
 	/* Update environmental data if provided and valid */
-	if (!isnan(temp_celsius) && !isnan(humidity_percent) && temp_celsius >= -40.0f &&
-	    temp_celsius <= 85.0f && humidity_percent >= 0.0f && humidity_percent <= 100.0f) {
+	if (!isnan(temp_celsius) && !isnan(humidity_percent) &&
+	    temp_celsius >= CCS811_ENV_TEMP_MIN_C && temp_celsius <= CCS811_ENV_TEMP_MAX_C &&
+	    humidity_percent >= 0.0f && humidity_percent <= CCS811_ENV_HUM_MAX_PCT) {
 
 		int32_t temp_whole = (int32_t)temp_celsius;
 		int32_t hum_whole = (int32_t)humidity_percent;
 
 		temp_val.val1 = temp_whole;
-		temp_val.val2 = (int32_t)((temp_celsius - (float)temp_whole) * 1000000.0f);
+		temp_val.val2 =
+			(int32_t)((temp_celsius - (float)temp_whole) * CCS811_SENSOR_VAL_FRAC);
 		hum_val.val1 = hum_whole;
-		hum_val.val2 = (int32_t)((humidity_percent - (float)hum_whole) * 1000000.0f);
+		hum_val.val2 =
+			(int32_t)((humidity_percent - (float)hum_whole) * CCS811_SENSOR_VAL_FRAC);
 
 		int env_ret = ccs811_envdata_update(ccs811_dev, &temp_val, &hum_val);
 		if (env_ret != 0) {
@@ -399,7 +412,8 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 		ret = sensor_channel_get(ccs811_dev, SENSOR_CHAN_CO2, &co2_val);
 		if (ret == 0) {
 			/* Validate CO2 reading is within reasonable bounds */
-			if (co2_val.val1 >= 400 && co2_val.val1 <= 8192) {
+			if (co2_val.val1 >= CCS811_ECO2_MIN_PPM &&
+			    co2_val.val1 <= CCS811_ECO2_MAX_PPM) {
 				*co2_ppm = (uint16_t)co2_val.val1;
 				cached_co2_ppm = *co2_ppm; /* Cache the reading */
 				LOG_DBG("CO2: %d ppm", *co2_ppm);
@@ -419,7 +433,8 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 		ret = sensor_channel_get(ccs811_dev, SENSOR_CHAN_VOC, &tvoc_val);
 		if (ret == 0) {
 			/* Validate TVOC reading is within reasonable bounds */
-			if (tvoc_val.val1 >= 0 && tvoc_val.val1 <= 1187) {
+			if (tvoc_val.val1 >= CCS811_TVOC_MIN_PPB &&
+			    tvoc_val.val1 <= CCS811_TVOC_MAX_PPB) {
 				*tvoc_ppb = (uint16_t)tvoc_val.val1;
 				cached_tvoc_ppb = *tvoc_ppb; /* Cache the reading */
 				LOG_DBG("TVOC: %d ppb", *tvoc_ppb);
@@ -534,6 +549,11 @@ int ccs811_driver_get_mode(void)
 	}
 
 	/* Get the current mode from the driver data */
+	/* DEPENDENCY: Accesses Zephyr CCS811 internal struct directly.
+	 * Tightly coupled to modules/zephyr/drivers/sensor/ams/ccs811/ccs811.h.
+	 * If the driver is updated, this cast may silently break. */
+	BUILD_ASSERT(sizeof(((struct ccs811_data *)0)->mode) == sizeof(uint8_t),
+		     "ccs811_data.mode field size mismatch — check internal struct coupling");
 	struct ccs811_data *drv_data = (struct ccs811_data *)ccs811_dev->data;
 	if (!drv_data) {
 		LOG_ERR("CCS811 driver data is NULL");

@@ -215,12 +215,16 @@ ZTEST(sensor_manager_sensor_data, test_zero_init_all_invalid)
 {
 	struct sensor_data d = {0};
 
-	zassert_false(d.temperature_valid, "Zero-init temperature_valid must be false");
-	zassert_false(d.humidity_valid, "Zero-init humidity_valid must be false");
-	zassert_false(d.pressure_valid, "Zero-init pressure_valid must be false");
-	zassert_false(d.eco2_valid, "Zero-init eco2_valid must be false");
-	zassert_false(d.tvoc_valid, "Zero-init tvoc_valid must be false");
-	zassert_false(d.battery_valid, "Zero-init battery_valid must be false");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_TEMPERATURE),
+		      "Zero-init SENSOR_TEMPERATURE must be invalid");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_HUMIDITY),
+		      "Zero-init SENSOR_HUMIDITY must be invalid");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_PRESSURE),
+		      "Zero-init SENSOR_PRESSURE must be invalid");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_AIR_QUALITY),
+		      "Zero-init SENSOR_AIR_QUALITY must be invalid");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_BATTERY),
+		      "Zero-init SENSOR_BATTERY must be invalid");
 }
 
 ZTEST(sensor_manager_sensor_data, test_validity_flags_set_independently)
@@ -228,13 +232,16 @@ ZTEST(sensor_manager_sensor_data, test_validity_flags_set_independently)
 	struct sensor_data d = {0};
 
 	d.temperature = 22.5f;
-	d.temperature_valid = true;
+	d.valid_mask |= SENSOR_TEMPERATURE;
 
-	zassert_true(d.temperature_valid, "temperature_valid should be true after set");
-	zassert_false(d.humidity_valid, "humidity_valid must remain false");
-	zassert_false(d.pressure_valid, "pressure_valid must remain false");
-	zassert_false(d.eco2_valid, "eco2_valid must remain false");
-	zassert_false(d.tvoc_valid, "tvoc_valid must remain false");
+	zassert_true(SENSOR_DATA_IS_VALID(&d, SENSOR_TEMPERATURE),
+		     "SENSOR_TEMPERATURE should be valid after set");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_HUMIDITY),
+		      "SENSOR_HUMIDITY must remain invalid");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_PRESSURE),
+		      "SENSOR_PRESSURE must remain invalid");
+	zassert_false(SENSOR_DATA_IS_VALID(&d, SENSOR_AIR_QUALITY),
+		      "SENSOR_AIR_QUALITY must remain invalid");
 }
 
 ZTEST(sensor_manager_sensor_data, test_sampling_interval_is_900s)

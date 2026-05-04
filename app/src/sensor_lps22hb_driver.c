@@ -15,7 +15,7 @@
 #include <stdbool.h>
 
 /* Include LPS22HB driver header for register definitions */
-#include "../../../../modules/zephyr/drivers/sensor/st/lps22hb/lps22hb.h"
+#include "lps22hb.h"
 
 LOG_MODULE_REGISTER(lps22hb_driver, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -25,8 +25,11 @@ LOG_MODULE_REGISTER(lps22hb_driver, CONFIG_LOG_DEFAULT_LEVEL);
 #define LPS22HB_NODE DT_NODELABEL(lps22hb_press)
 
 /* Additional LPS22HB status register masks */
-#define LPS22HB_DRDY_PRESS_MASK 0x01 /* Pressure data available */
-#define LPS22HB_DRDY_TEMP_MASK  0x02 /* Temperature data available */
+static const uint8_t LPS22HB_DRDY_PRESS_MASK = 0x01U; /* Pressure data available */
+static const uint8_t LPS22HB_DRDY_TEMP_MASK = 0x02U;  /* Temperature data available */
+static const uint32_t LPS22HB_STABILIZATION_DELAY_MS = 50U;
+static const uint8_t LPS22HB_PRESSURE_REG_LEN = 5U; /* PRESS_OUT_XL/L/H + TEMP_OUT_L/H bytes */
+static const uint32_t LPS22HB_DRDY_TIMEOUT_MS = 100U;
 
 /* Static state */
 static const struct device *lps22hb_dev = NULL;
@@ -34,7 +37,6 @@ static const struct device *i2c_dev = NULL;
 static struct gpio_dt_spec lps22hb_int_pin;
 static bool lps22hb_enabled = false;
 static bool interrupt_initialized = false;
-static bool interrupt_enabled = false;
 
 /* Data ready semaphore and callback */
 static struct k_sem data_ready_sem;
@@ -134,7 +136,8 @@ int lps22hb_driver_power_on(void)
 		return -ENODEV;
 	}
 
-	uint8_t res_conf, ctrl_reg3;
+	uint8_t res_conf;
+	uint8_t ctrl_reg3;
 	int ret;
 
 	/* Enable sensor by clearing LC_EN bit (normal current mode) */
@@ -195,8 +198,9 @@ int lps22hb_driver_trigger_oneshot(void)
 	ret = i2c_reg_read_byte(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_STATUS, &status_reg);
 	if (ret == 0 && (status_reg & (LPS22HB_DRDY_PRESS_MASK | LPS22HB_DRDY_TEMP_MASK))) {
 		/* Clear by reading pressure and temperature data */
-		uint8_t dummy_data[5];
-		i2c_burst_read(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_PRESS_OUT_XL, dummy_data, 5);
+		uint8_t dummy_data[LPS22HB_PRESSURE_REG_LEN];
+		i2c_burst_read(i2c_dev, LPS22HB_I2C_ADDR, LPS22HB_REG_PRESS_OUT_XL, dummy_data,
+			       LPS22HB_PRESSURE_REG_LEN);
 		LOG_DBG("Cleared existing LPS22HB data ready status: 0x%02x", status_reg);
 	}
 
@@ -229,17 +233,17 @@ int lps22hb_driver_trigger_oneshot(void)
 	return 0;
 }
 
-int lps22hb_driver_wait_data_ready(int timeout_ms)
+int lps22hb_driver_wait_data_ready(k_timeout_t timeout)
 {
 	if (!interrupt_initialized) {
 		/* Polling mode - just wait the expected conversion time */
-		k_msleep(timeout_ms);
+		k_sleep(timeout);
 		return 0;
 	}
 
 	/* Wait for data ready interrupt using semaphore */
 	int64_t start_time = k_uptime_get();
-	int ret = k_sem_take(&data_ready_sem, K_MSEC(timeout_ms));
+	int ret = k_sem_take(&data_ready_sem, timeout);
 
 	/* Disable interrupt after measurement */
 	gpio_pin_interrupt_configure_dt(&lps22hb_int_pin, GPIO_INT_DISABLE);
@@ -315,7 +319,7 @@ int lps22hb_driver_read_pressure(float *pressure)
 	}
 
 	/* Wait for sensor stabilization and trigger one-shot measurement */
-	k_msleep(50);
+	k_msleep((int32_t)LPS22HB_STABILIZATION_DELAY_MS);
 
 	ret = lps22hb_driver_trigger_oneshot();
 	if (ret != 0) {
@@ -323,13 +327,11 @@ int lps22hb_driver_read_pressure(float *pressure)
 		goto power_down;
 	}
 
-	/* For interrupt mode, wait for data ready */
-	if (interrupt_enabled) {
-		/* Wait for data ready interrupt with timeout */
-		ret = k_sem_take(&data_ready_sem, K_MSEC(100));
-		if (ret != 0) {
-			LOG_WRN("LPS22HB data ready timeout, using polling");
-		}
+	/* Wait for data ready - uses interrupt semaphore if interrupt_initialized, else polls */
+	ret = lps22hb_driver_wait_data_ready(K_MSEC(LPS22HB_DRDY_TIMEOUT_MS));
+	if (ret != 0) {
+		LOG_WRN("LPS22HB DRDY wait failed: %d", ret);
+		goto power_down;
 	}
 
 	/* Fetch sample using Zephyr driver */

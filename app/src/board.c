@@ -30,82 +30,34 @@ LOG_MODULE_REGISTER(board, CONFIG_LOG_DEFAULT_LEVEL);
 #define SX1509B_INIT_OUT_LOW  DT_PROP(SX1509B_NODE, init_out_low)
 #define SX1509B_NGPIOS        DT_PROP(SX1509B_NODE, ngpios)
 
+/* Board diagnostic buffer sizes */
+#define GPIO_CONFIG_STR_LEN 12U /* "IN+PULLUP\0" = 10 chars + margin */
+#define GPIO_PIN_STR_LEN    4U  /* "31\0" = 3 chars + extra byte   */
+#define GPIO_PIN_LIST_LEN   64U /* Comma-separated pin list from bitmask */
+
+/*
+ * Pin line-name tables — populated from the gpio-line-names DTS property
+ * defined in thingy52.overlay.  All label strings live in the overlay; this
+ * C file contains no hardcoded pin-name strings.
+ */
+static const char *gpio0_line_names[] = DT_PROP_OR(DT_NODELABEL(gpio0), gpio_line_names, {""});
+static const uint8_t gpio0_line_names_len = DT_PROP_LEN_OR(DT_NODELABEL(gpio0), gpio_line_names, 0);
+
+static const char *sx1509b_line_names[] = DT_PROP_OR(DT_NODELABEL(sx1509b), gpio_line_names, {""});
+static const uint8_t sx1509b_line_names_len =
+	DT_PROP_LEN_OR(DT_NODELABEL(sx1509b), gpio_line_names, 0);
+
+static const char *get_line_name(const char **names, uint8_t len, int pin)
+{
+	if (pin >= 0 && (uint8_t)pin < len && names[pin][0] != '\0') {
+		return names[pin];
+	}
+	return "";
+}
+
 /* GPIO device references */
 static const struct device *gpio0_dev;
 static const struct device *sx1509b_dev;
-
-/* GPIO0 pin function definitions from device tree and Thingy:52 schematics */
-static const char *get_gpio0_pin_function(int pin)
-{
-	switch (pin) {
-	case 0:
-		return "XL1 (32KHz XTAL)";
-	case 1:
-		return "XL2 (32KHz XTAL)";
-	case 2:
-		return "UART_RX";
-	case 3:
-		return "UART_TX";
-	case 4:
-		return "AIN2 (ANALOG)";
-	case 5:
-		return "AIN3 (ANALOG)";
-	case 6:
-		return "MPU_INT";
-	case 7:
-		return "SDA";
-	case 8:
-		return "SCL";
-	case 9:
-		return "NFC1";
-	case 10:
-		return "NFC2";
-	case 11:
-		return "Button";
-	case 12:
-		return "LIS_INT1";
-	case 13:
-		return "USB_DETECT (I2C)";
-	case 14:
-		return "SDA_EXT (I2C)";
-	case 15:
-		return "SCL_EXT (I2C)";
-	case 16:
-		return "SX1509B_RESET (OUTPUT)";
-	case 17:
-		return "BAT_CHG_STAT (INPUT)";
-	case 18:
-		return "MOS 1";
-	case 19:
-		return "MOS 2";
-	case 20:
-		return "MOS 3";
-	case 21:
-		return "MOS 4";
-	case 22:
-		return "CCS811_INT";
-	case 23:
-		return "LPS22HB_INT (INPUT)";
-	case 24:
-		return "HTS221_INT (INPUT)";
-	case 25:
-		return "MIC_DOUT";
-	case 26:
-		return "MIC_CLK";
-	case 27:
-		return "SPEAKER";
-	case 28:
-		return "Battery";
-	case 29:
-		return "SPK PWR Ctrl";
-	case 30:
-		return "VDD PWR Ctrl";
-	case 31:
-		return "BH INT";
-	default:
-		return "UNKNOWN";
-	}
-}
 
 /* GPIO0 pins - intelligent state reading based on pin configuration */
 static void print_gpio0_pin_states(void)
@@ -115,7 +67,9 @@ static void print_gpio0_pin_states(void)
 	LOG_INF("Pin | Config   | State | Function");
 	LOG_INF("----|----------|-------|----------");
 
-	int high_count = 0, low_count = 0, error_count = 0;
+	int high_count = 0;
+	int low_count = 0;
+	int error_count = 0;
 	uint32_t output_reg = nrf_gpio_port_out_read(NRF_P0);
 
 	/* Read all GPIO0 pins using appropriate method */
@@ -124,10 +78,10 @@ static void print_gpio0_pin_states(void)
 		nrf_gpio_pin_dir_t dir = nrf_gpio_pin_dir_get(pin);
 		nrf_gpio_pin_input_t input = nrf_gpio_pin_input_get(pin);
 		nrf_gpio_pin_pull_t pull = nrf_gpio_pin_pull_get(pin);
-		const char *function = get_gpio0_pin_function(pin);
+		const char *function = get_line_name(gpio0_line_names, gpio0_line_names_len, pin);
 
 		bool pin_state;
-		char config_str[12]; /* Increased size for pull info */
+		char config_str[GPIO_CONFIG_STR_LEN]; /* Sized for longest label "IN+PULLUP\0" */
 
 		if (dir == NRF_GPIO_PIN_DIR_OUTPUT) {
 			/* Output pin - read from output register */
@@ -180,45 +134,6 @@ static void print_gpio0_pin_states(void)
 	LOG_INF("GPIO0 Summary: %d HIGH, %d LOW, %d errors, %d total pins", high_count, low_count,
 		error_count, GPIO0_PIN_COUNT);
 	LOG_INF("Pull types: PULLUP=internal pull-up, PULLDN=internal pull-down, INPUT=no pull");
-} /* SX1509B pin function definitions from device tree comments */
-static const char *get_sx1509b_pin_function(int pin)
-{
-	switch (pin) {
-	case 0:
-		return "IOEXT_0";
-	case 1:
-		return "IOEXT_1";
-	case 2:
-		return "IOEXT_2";
-	case 3:
-		return "IOEXT_3";
-	case 4:
-		return "BAT_MON_EN (OUTPUT)";
-	case 5:
-		return "LIGHTWELL_G (OUTPUT_ACTIVE_LOW)";
-	case 6:
-		return "LIGHTWELL_B (OUTPUT_ACTIVE_LOW)";
-	case 7:
-		return "LIGHTWELL_R (OUTPUT_ACTIVE_LOW)";
-	case 8:
-		return "MPU_PWR_CTRL (OUTPUT)";
-	case 9:
-		return "MIC_PWR_CTRL (OUTPUT)";
-	case 10:
-		return "CCS_PWR_CTRL (OUTPUT)";
-	case 11:
-		return "CCS_RESET (OUTPUT)";
-	case 12:
-		return "CCS_WAKE (OUTPUT)";
-	case 13:
-		return "SENSE_LED_R (OUTPUT)";
-	case 14:
-		return "SENSE_LED_G (OUTPUT)";
-	case 15:
-		return "SENSE_LED_B (OUTPUT)";
-	default:
-		return "UNKNOWN";
-	}
 }
 
 /* Helper function to build pin list string from bitmask */
@@ -227,13 +142,13 @@ static void build_pin_list_string(uint16_t mask, char *buffer, size_t buffer_siz
 	buffer[0] = '\0'; /* Start with empty string */
 	bool first = true;
 
-	for (int pin = 15; pin >= 0; pin--) { /* Check from high to low for readable order */
+	for (int pin = SX1509B_NGPIOS - 1; pin >= 0; pin--) {
 		if (mask & (1 << pin)) {
 			if (!first) {
 				strncat(buffer, ",", buffer_size - strlen(buffer) - 1);
 			}
-			char pin_str[4];
-			snprintf(pin_str, sizeof(pin_str), "%d", pin);
+			char pin_str[GPIO_PIN_STR_LEN];
+			(void)snprintf(pin_str, sizeof(pin_str), "%d", pin);
 			strncat(buffer, pin_str, buffer_size - strlen(buffer) - 1);
 			first = false;
 		}
@@ -253,7 +168,8 @@ static void print_sx1509b_pin_states(void)
 	}
 
 	/* Build dynamic pin lists from device tree bitmasks */
-	char high_pins[64], low_pins[64];
+	char high_pins[GPIO_PIN_LIST_LEN];
+	char low_pins[GPIO_PIN_LIST_LEN];
 	build_pin_list_string(SX1509B_INIT_OUT_HIGH, high_pins, sizeof(high_pins));
 	build_pin_list_string(SX1509B_INIT_OUT_LOW, low_pins, sizeof(low_pins));
 
@@ -266,7 +182,10 @@ static void print_sx1509b_pin_states(void)
 	LOG_INF("Pin | State | Expected | Function");
 	LOG_INF("----|-------|----------|----------");
 
-	int high_count = 0, low_count = 0, error_count = 0, mismatch_count = 0;
+	int high_count = 0;
+	int low_count = 0;
+	int error_count = 0;
+	int mismatch_count = 0;
 	uint16_t init_high = SX1509B_INIT_OUT_HIGH;
 	uint16_t init_low = SX1509B_INIT_OUT_LOW;
 
@@ -276,7 +195,8 @@ static void print_sx1509b_pin_states(void)
 		bool expected_low = (init_low & (1 << pin)) != 0;
 		const char *expected_str =
 			expected_high ? "HIGH" : (expected_low ? "LOW" : "UNDEF");
-		const char *function = get_sx1509b_pin_function(pin);
+		const char *function =
+			get_line_name(sx1509b_line_names, sx1509b_line_names_len, pin);
 
 		if (pin_state >= 0) {
 			const char *state_str = pin_state ? "HIGH" : "LOW";
