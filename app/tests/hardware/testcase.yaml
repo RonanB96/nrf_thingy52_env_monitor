@@ -1,0 +1,19 @@
+common:
+  tags:
+    - hil
+    - sensors
+
+tests:
+  thingy52.env_monitor.hil.sensors:
+    platform_allow:
+      - thingy52/nrf52832
+    integration_platforms:
+      - thingy52/nrf52832
+    harness: ztest
+    timeout: 120
+    tags:
+      - hil
+      - sensors
+      - hts221
+      - lps22hb
+      - ccs811
