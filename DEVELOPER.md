@@ -12,6 +12,7 @@ basic build and flash. See [README.md](README.md) for the end-user quick-start.
 - [Code Style and Formatting](#code-style-and-formatting)
 - [Static Analysis](#static-analysis)
 - [Testing](#testing)
+- [AI Agent Hardware Interaction](#ai-agent-hardware-interaction)
 - [CI Pipeline](#ci-pipeline)
 - [Contributing Workflow](#contributing-workflow)
 
@@ -193,7 +194,12 @@ The `.clang-tidy` file remains the source of checks (`clang-tidy:take-config-fro
 
 Tests live under `app/tests/` and use the
 [Zephyr ZTEST framework](https://docs.zephyrproject.org/latest/develop/test/ztest.html).
-They run on the `native_sim` target without physical hardware.
+Two test targets exist:
+
+| Target | Board | Purpose |
+|--------|-------|---------|
+| `app/tests/` | `native_sim` | Unit tests with mocks — no hardware required |
+| `app/tests/hardware/` | `thingy52/nrf52832` | HIL tests — exercises real sensor drivers on device |
 
 ### Running Tests
 
@@ -232,6 +238,31 @@ source .venv/bin/activate
 Results are written to `twister-out/`. Pass `--report-dir <dir>` to customise the output
 location.
 
+### Hardware-in-the-Loop (HIL) Tests
+
+HIL tests live under `app/tests/hardware/` and run the ZTEST framework directly on the
+Thingy:52 using real sensor hardware. Twister flashes the binary and reads `PROJECT EXECUTION
+SUCCESSFUL` from the UART to determine pass/fail.
+
+**Build and flash manually:**
+
+```bash
+source .venv/bin/activate && source env.sh
+west build app/tests/hardware -d app/tests/hardware/build -b thingy52/nrf52832 -p always
+west flash -d app/tests/hardware/build --runner jlink
+```
+
+**Run via Twister with the hardware map:**
+
+```bash
+source .venv/bin/activate && source env.sh
+./modules/zephyr/scripts/twister \
+  -T app/tests/hardware \
+  --hardware-map hardware.map \
+  --device-testing \
+  --inline-logs
+```
+
 ### Writing a New Test
 
 Test files follow the same Zephyr C coding style as application sources:
@@ -251,6 +282,120 @@ ZTEST(my_suite, test_example)
 ```
 
 Add the file to `app/tests/CMakeLists.txt` under `target_sources`.
+
+---
+
+## AI Agent Hardware Interaction
+
+This section documents how an AI agent (or any automated process) controls the
+hardware without human involvement.
+
+### Hardware inventory
+
+| Item | Value |
+|------|-------|
+| Board | thingy52/nrf52832 |
+| Debugger | J-Link Ultra (S/N 505103055) |
+| Serial port | `/dev/ttyUSB[X]` at 115200 baud |
+| Hardware map | `hardware.map` (Twister format) |
+
+Confirm the hardware is reachable:
+
+```bash
+nrfutil device list
+ls -la /dev/ttyUSB[X]
+```
+
+### Flash firmware
+
+Always activate the venv and source `env.sh` first:
+
+```bash
+source .venv/bin/activate
+source env.sh
+west flash -d app/build --runner jlink
+```
+
+### Capture boot logs
+
+The device only emits serial output during the first ~1.5 seconds after reset.
+The logger **must be running before flash is triggered** to avoid missing boot
+output.  Use `scripts/serial_logger.py` — it stays open until explicitly killed:
+
+**Terminal 1 — logger (start first):**
+```bash
+python3 scripts/serial_logger.py /dev/ttyUSB[X] 115200 boot.log
+```
+
+**Terminal 2 — flash:**
+```bash
+source .venv/bin/activate && source env.sh
+west flash -d app/build --runner jlink
+```
+
+Once the expected log lines have been captured, kill the logger (`Ctrl-C` or
+`kill <pid>`).  Do **not** add a time-based deadline to the logger — it must
+remain open for as long as needed and be closed explicitly.
+
+### Full verification (automated)
+
+`scripts/verify_hardware.sh` orchestrates both steps and asserts three boot
+patterns:
+
+```bash
+bash scripts/verify_hardware.sh [build_dir]
+```
+
+Expected output:
+
+```
+=== Thingy:52 Hardware Verification ===
+[1/4] Checking JLink...
+  OK: JLink detected
+[2/4] Checking serial port /dev/ttyUSB1...
+  OK: /dev/ttyUSB1 accessible
+[3/4] Starting serial logger then flashing...
+  OK: west flash succeeded
+[4/4] Verifying boot log...
+  OK: 'Booting BLE Env Monitor'
+  OK: 'sensor_manager: Sensor manager initialized'
+  OK: 'ble_advertiser: Legacy advertising started successfully'
+
+=== PASS: Hardware verification complete ===
+```
+
+### Twister hardware testing
+
+The `hardware.map` file at the repository root describes the attached device
+in [Twister hardware-map format](https://docs.zephyrproject.org/latest/develop/test/twister.html#hardware-testing):
+
+```yaml
+- connected: true
+  id: '505103055'
+  platform: thingy52/nrf52832
+  runner: jlink
+  serial: /dev/ttyUSB[X]
+  baud: 115200
+```
+
+To run hardware tests via Twister:
+
+```bash
+source .venv/bin/activate && source env.sh
+./modules/zephyr/scripts/twister \
+  -T app/tests/hardware \
+  --hardware-map hardware.map \
+  --device-testing \
+  --inline-logs
+```
+
+### Permissions
+
+The current user must be in the `dialout` group to access `/dev/ttyUSB[X]`:
+
+```bash
+sudo usermod -aG dialout $USER   # then log out and back in
+```
 
 ---
 

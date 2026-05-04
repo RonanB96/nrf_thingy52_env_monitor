@@ -1,0 +1,132 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build Firmware",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && source env.sh && west build -p always app -d app/build"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Build Tests",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && source env.sh && export ZEPHYR_TOOLCHAIN_VARIANT=host && west build app/tests -d app/tests/build -b native_sim -p always"
+      ],
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Run Unit Tests",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && source env.sh && export ZEPHYR_TOOLCHAIN_VARIANT=host && west build app/tests -d app/tests/build -b native_sim -p always && app/tests/build/zephyr/zephyr.exe"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Run Tests (Twister)",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && source env.sh && ./modules/zephyr/scripts/twister -T app/tests -p native_sim --inline-logs"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Code Checker (CodeChecker)",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && source env.sh && west build -p always app -d app/build && CodeChecker analyze -o .codechecker_reports --config .codechecker.json app/build/app/compile_commands.json && CodeChecker parse --config .codechecker.json .codechecker_reports"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Format Code",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && find app/src app/include app/tests/src app/tests/hardware/src \\( -name '*.c' -o -name '*.h' \\) -exec clang-format -i {} \\;"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Check Formatting",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && find app/src app/include app/tests/src app/tests/hardware/src \\( -name '*.c' -o -name '*.h' \\) -exec clang-format --dry-run --Werror {} +"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Incremental Build",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source .venv/bin/activate && source env.sh && west build app -d app/build"
+      ],
+      "group": "build",
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    }
+  ]
+}
