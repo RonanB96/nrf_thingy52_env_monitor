@@ -14,11 +14,11 @@
 #include <stdbool.h>
 
 /* CCS811 measurement range and sentinel constants */
-static const uint16_t CCS811_INVALID_READING = 65021U;
-static const uint16_t CCS811_ECO2_MIN_PPM = 400U;
-static const uint16_t CCS811_ECO2_MAX_PPM = 8192U;
-static const uint16_t CCS811_TVOC_MIN_PPB = 0U;
-static const uint16_t CCS811_TVOC_MAX_PPB = 1187U;
+#define CCS811_INVALID_READING 65021U
+#define CCS811_ECO2_MIN_PPM    400U
+#define CCS811_ECO2_MAX_PPM    8192U
+#define CCS811_TVOC_MIN_PPB    0U
+#define CCS811_TVOC_MAX_PPB    1187U
 
 #ifdef __cplusplus
 extern "C" {

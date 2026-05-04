@@ -14,6 +14,7 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 #include "device_naming.h"
 
 LOG_MODULE_REGISTER(device_naming, CONFIG_LOG_DEFAULT_LEVEL);
@@ -23,7 +24,7 @@ static bool naming_initialized = false;
 
 static const size_t DEVICE_NAME_MIN_BUF = 16U; /* Minimum buffer to fit "Thingy52-XXXXXXXX\0" */
 static const int DEVICE_ID_BYTES_USED = 4;     /* Last 4 bytes of HW ID used for unique suffix */
-static const int BITS_PER_BYTE_SHIFT = 8;      /* Bit shift per byte (== CHAR_BIT) */
+#define BITS_PER_BYTE_SHIFT CHAR_BIT           /* Bit shift per byte */
 
 /* hwinfo returns up to 8 bytes of device ID on nRF52 */
 #define HWINFO_DEVICE_ID_LEN 8U
@@ -62,7 +63,7 @@ int device_naming_get_name(char *name_buffer, size_t buffer_size)
 
 	/* Create unique ID from last 4 bytes */
 	for (int i = 0; i < DEVICE_ID_BYTES_USED && i < id_len; i++) {
-		unique_id |= (device_id[id_len - 1 - i] << (i * BITS_PER_BYTE_SHIFT));
+		unique_id |= ((uint32_t)device_id[id_len - 1 - i] << (i * BITS_PER_BYTE_SHIFT));
 	}
 
 	/* Format as "Thingy52-XXXXXXXX" */

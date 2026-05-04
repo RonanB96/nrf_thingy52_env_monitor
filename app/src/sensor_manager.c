@@ -132,28 +132,31 @@ static int read_air_quality(void)
 	ret = ccs811_driver_read_air_quality(&co2_ppm, &tvoc_ppb, temp, humidity);
 
 	if (ret == 0) {
-		/* Filter out invalid readings */
-		if (co2_ppm != CCS811_INVALID_READING && co2_ppm != 0 &&
-		    co2_ppm >= CCS811_ECO2_MIN_PPM && co2_ppm <= CCS811_ECO2_MAX_PPM) {
+		/* Validate each reading independently, then set the flag only when both are valid
+		 */
+		bool eco2_ok = (co2_ppm != CCS811_INVALID_READING && co2_ppm != 0 &&
+				co2_ppm >= CCS811_ECO2_MIN_PPM && co2_ppm <= CCS811_ECO2_MAX_PPM);
+		bool tvoc_ok = (tvoc_ppb != CCS811_INVALID_READING &&
+				tvoc_ppb >= CCS811_TVOC_MIN_PPB && tvoc_ppb <= CCS811_TVOC_MAX_PPB);
+
+		if (eco2_ok) {
 			current_data.eco2 = co2_ppm;
-			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		} else {
-			current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 			LOG_INF("Invalid eCO2 reading: %d (0x%04x)", co2_ppm, co2_ppm);
 		}
 
-		if (tvoc_ppb != CCS811_INVALID_READING && tvoc_ppb >= CCS811_TVOC_MIN_PPB &&
-		    tvoc_ppb <= CCS811_TVOC_MAX_PPB) {
+		if (tvoc_ok) {
 			current_data.tvoc = tvoc_ppb;
-			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		} else {
-			current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 			LOG_INF("Invalid TVOC reading: %d (0x%04x)", tvoc_ppb, tvoc_ppb);
 		}
 
-		if ((current_data.valid_mask & SENSOR_AIR_QUALITY) != 0) {
+		if (eco2_ok && tvoc_ok) {
+			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 			LOG_INF("CCS811 readings: eCO2=%d ppm, TVOC=%d ppb", current_data.eco2,
 				current_data.tvoc);
+		} else {
+			current_data.valid_mask &= ~SENSOR_AIR_QUALITY;
 		}
 	} else if (ret == -EAGAIN) {
 		/* Sensor still in conditioning or data not ready */
@@ -310,24 +313,23 @@ int sensor_manager_update(void)
 	read_air_quality();
 	read_battery();
 
-	/* Read callback pointer under lock, call after release to avoid deadlock */
+	/* Copy data and callback pointer under lock, call after release to avoid deadlock */
+	struct sensor_data local_data = current_data;
 	sensor_update_callback_t local_cb = update_callback;
 	k_mutex_unlock(&sensor_manager_mutex);
 
 	LOG_INF("Sensor update: T=%.1f°C H=%.1f%% P=%.1fhPa CO2=%dppm TVOC=%dppb Bat=%d%%",
-		(double)((current_data.valid_mask & SENSOR_TEMPERATURE) != 0
-				 ? current_data.temperature
-				 : 0.0f),
-		(double)((current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity
-									  : 0.0f),
-		(double)((current_data.valid_mask & SENSOR_PRESSURE) != 0 ? current_data.pressure
-									  : 0.0f),
-		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.eco2 : 0,
-		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.tvoc : 0,
-		(current_data.valid_mask & SENSOR_BATTERY) != 0 ? current_data.battery_level : 0);
+		(double)((local_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? local_data.temperature
+									   : 0.0f),
+		(double)((local_data.valid_mask & SENSOR_HUMIDITY) != 0 ? local_data.humidity
+									: 0.0f),
+		(double)((local_data.valid_mask & SENSOR_PRESSURE) != 0 ? local_data.pressure
+									: 0.0f),
+		(local_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? local_data.eco2 : 0,
+		(local_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? local_data.tvoc : 0,
+		(local_data.valid_mask & SENSOR_BATTERY) != 0 ? local_data.battery_level : 0);
 
 	if (local_cb) {
-		struct sensor_data local_data = *(struct sensor_data *)&current_data;
 		local_cb(&local_data);
 	}
 
@@ -367,26 +369,25 @@ int sensor_manager_update_selective(enum sensor_select sensors)
 		read_battery();
 	}
 
-	/* Read callback pointer under lock, call after release to avoid deadlock */
+	/* Copy data and callback pointer under lock, call after release to avoid deadlock */
+	struct sensor_data local_data = current_data;
 	sensor_update_callback_t local_cb = update_callback;
 	k_mutex_unlock(&sensor_manager_mutex);
 
 	LOG_DBG("Selective sensor update (0x%02x): T=%.1f°C H=%.1f%% P=%.1fhPa CO2=%dppm "
 		"TVOC=%dppb Bat=%d%%",
 		sensors,
-		(double)((current_data.valid_mask & SENSOR_TEMPERATURE) != 0
-				 ? current_data.temperature
-				 : 0.0f),
-		(double)((current_data.valid_mask & SENSOR_HUMIDITY) != 0 ? current_data.humidity
-									  : 0.0f),
-		(double)((current_data.valid_mask & SENSOR_PRESSURE) != 0 ? current_data.pressure
-									  : 0.0f),
-		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.eco2 : 0,
-		(current_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? current_data.tvoc : 0,
-		(current_data.valid_mask & SENSOR_BATTERY) != 0 ? current_data.battery_level : 0);
+		(double)((local_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? local_data.temperature
+									   : 0.0f),
+		(double)((local_data.valid_mask & SENSOR_HUMIDITY) != 0 ? local_data.humidity
+									: 0.0f),
+		(double)((local_data.valid_mask & SENSOR_PRESSURE) != 0 ? local_data.pressure
+									: 0.0f),
+		(local_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? local_data.eco2 : 0,
+		(local_data.valid_mask & SENSOR_AIR_QUALITY) != 0 ? local_data.tvoc : 0,
+		(local_data.valid_mask & SENSOR_BATTERY) != 0 ? local_data.battery_level : 0);
 
 	if (local_cb) {
-		struct sensor_data local_data = *(struct sensor_data *)&current_data;
 		local_cb(&local_data);
 	}
 
@@ -470,15 +471,15 @@ void sensor_manager_update_air_quality_for_ble(void)
 	ret = ccs811_driver_read_for_ble(&co2_ppm, &tvoc_ppb, temp, humidity);
 
 	if (ret == 0) {
-		/* Filter out invalid readings and update cache */
-		if (co2_ppm != CCS811_INVALID_READING && co2_ppm != 0 &&
-		    co2_ppm >= CCS811_ECO2_MIN_PPM && co2_ppm <= CCS811_ECO2_MAX_PPM) {
-			current_data.eco2 = co2_ppm;
-			current_data.valid_mask |= SENSOR_AIR_QUALITY;
-		}
+		/* Validate both readings; set the flag only when both are valid (keep cache on
+		 * failure so BLE advertiser continues using last known good values) */
+		bool eco2_ok = (co2_ppm != CCS811_INVALID_READING && co2_ppm != 0 &&
+				co2_ppm >= CCS811_ECO2_MIN_PPM && co2_ppm <= CCS811_ECO2_MAX_PPM);
+		bool tvoc_ok = (tvoc_ppb != CCS811_INVALID_READING &&
+				tvoc_ppb >= CCS811_TVOC_MIN_PPB && tvoc_ppb <= CCS811_TVOC_MAX_PPB);
 
-		if (tvoc_ppb != CCS811_INVALID_READING && tvoc_ppb >= CCS811_TVOC_MIN_PPB &&
-		    tvoc_ppb <= CCS811_TVOC_MAX_PPB) {
+		if (eco2_ok && tvoc_ok) {
+			current_data.eco2 = co2_ppm;
 			current_data.tvoc = tvoc_ppb;
 			current_data.valid_mask |= SENSOR_AIR_QUALITY;
 		}

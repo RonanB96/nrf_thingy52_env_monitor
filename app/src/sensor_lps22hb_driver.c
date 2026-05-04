@@ -237,7 +237,7 @@ int lps22hb_driver_wait_data_ready(k_timeout_t timeout)
 {
 	if (!interrupt_initialized) {
 		/* Polling mode - just wait the expected conversion time */
-		k_msleep(k_ticks_to_ms_floor32(timeout.ticks));
+		k_sleep(timeout);
 		return 0;
 	}
 

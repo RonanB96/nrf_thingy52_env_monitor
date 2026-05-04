@@ -82,27 +82,26 @@ _Static_assert((int)ESS_APP_INDOOR <= UINT8_MAX,
 /* Environmental Sensing Service measurements - Bluetooth SIG ESS Standard */
 struct es_measurement {
 	uint16_t flags; /* Reserved for Future Use - always 0x0000 per SIG spec */
-	enum ess_sampling_func
-		sampling_func; /* Sampling Function field - how the measurement is obtained:
-				* 0x00 = Unspecified
-				* 0x01 = Instantaneous (single point-in-time measurement)
-				* 0x02 = Arithmetic Mean (average over measurement period)
-				* 0x03 = RMS (root mean square over measurement period)
-				* 0x04 = Maximum (peak value over measurement period)
-				* 0x05 = Minimum (lowest value over measurement period)
-				* 0x06 = Accumulated (cumulative sum over measurement period)
-				* 0x07 = Count (number of measurements in measurement period) */
-	uint32_t meas_period;  /* Measurement Period - time in seconds over which sampling occurs:
-				* 0x000000 = Not applicable (for instantaneous measurements)
-				* 0x000001-0xFFFFFF = Period in seconds (1 sec to ~194 days) */
+	enum ess_sampling_func sampling_func; /* Sampling Function field:
+					       * ESS_SAMPLING_UNSPECIFIED    = 0x00
+					       * ESS_SAMPLING_INSTANTANEOUS  = 0x01
+					       * ESS_SAMPLING_ARITHMETIC_MEAN = 0x02
+					       * ESS_SAMPLING_RMS            = 0x03
+					       * ESS_SAMPLING_MAXIMUM        = 0x04
+					       * ESS_SAMPLING_MINIMUM        = 0x05
+					       * ESS_SAMPLING_ACCUMULATED    = 0x06
+					       * ESS_SAMPLING_COUNT          = 0x07 */
+	uint32_t meas_period; /* Measurement Period - time in seconds over which sampling occurs:
+			       * 0x000000 = Not applicable (for instantaneous measurements)
+			       * 0x000001-0xFFFFFF = Period in seconds (1 sec to ~194 days) */
 	uint32_t update_interval;         /* Update Interval - time in seconds between measurements:
 					   * 0x000000 = Not applicable (for on-demand/event-driven updates)
 					   * 0x000001-0xFFFFFF = Interval in seconds (1 sec to ~194 days) */
-	enum ess_application application; /* Application field - describes measurement context:
-					   * 0x00 = Unspecified
-					   * 0x01 = Air (atmospheric/ambient air measurements)
-					   * 0x13 = Outdoor (external environmental conditions)
-					   * 0x14 = Indoor (internal environmental conditions) */
+	enum ess_application application; /* Application field:
+					   * ESS_APP_UNSPECIFIED = 0x00
+					   * ESS_APP_AIR         = 0x01
+					   * ESS_APP_OUTDOOR     = 0x13
+					   * ESS_APP_INDOOR      = 0x14 */
 	uint8_t meas_uncertainty; /* Measurement Uncertainty - accuracy/precision information:
 				   * Expressed in same units as the measurement
 				   * Represents ± uncertainty range (e.g., ±0.5°C = 0x32 for temp)
@@ -119,15 +118,14 @@ struct ess_sensor {
 			      * TVOC: 1 ppb resolution (0 = 0 ppb) */
 	int32_t lower_limit; /* Valid Range Lower Limit - minimum acceptable value */
 	int32_t upper_limit; /* Valid Range Upper Limit - maximum acceptable value */
-	enum ess_trigger_condition
-		condition; /* Trigger Setting Condition - when to send notifications:
-			    * ESS_TRIGGER_INACTIVE = No notifications
-			    * ESS_TRIGGER_VALUE_CHANGED = Notify on any value change
-			    * ESS_TRIGGER_LESS_THAN_REF_VALUE = Notify when < ref_val
-			    * ESS_TRIGGER_GREATER_THAN_REF_VALUE = Notify when > ref_val
-			    * etc. (see ESS_TRIGGER_* macros above) */
-	int32_t ref_val;   /* Trigger Setting Reference Value - comparison value for conditional
-			      triggers */
+	enum ess_trigger_condition condition; /* Trigger Setting Condition:
+					       * ESS_TRIGGER_INACTIVE
+					       * ESS_TRIGGER_VALUE_CHANGED
+					       * ESS_TRIGGER_LESS_THAN_REF_VALUE
+					       * ESS_TRIGGER_GREATER_THAN_REF_VALUE
+					       * etc. (see enum ess_trigger_condition) */
+	int32_t ref_val; /* Trigger Setting Reference Value - comparison value for conditional
+			    triggers */
 	struct es_measurement
 		meas;        /* ES Measurement Descriptor - describes how measurement is obtained */
 	bool notify_enabled; /* Client Characteristic Configuration - true if client enabled
