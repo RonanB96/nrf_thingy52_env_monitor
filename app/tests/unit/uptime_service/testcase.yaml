@@ -1,0 +1,13 @@
+common:
+  tags:
+    - unit
+    - uptime_service
+
+tests:
+  thingy52.env_monitor.unit.uptime_service:
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    harness: ztest

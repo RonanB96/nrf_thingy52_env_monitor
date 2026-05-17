@@ -1,22 +1,26 @@
 mainmenu "BLE Environmental Sensor Configuration"
 
+# Allow `west build ... -DCONFIG_COVERAGE=y` for the firmware build to emit
+# .gcno files for every app/src/*.c at compile time. gcov instrumentation
+# is purely a compile-time concern (it tags basic blocks via -fprofile-arcs
+# -ftest-coverage); no runtime gcov dump is required for baseline reporting.
+config HAS_COVERAGE_SUPPORT
+	default y
+
 config SENSOR_ENV_INTERVAL_SEC
 	int "Environmental sensor sampling interval (seconds)"
 	default 900
 	range 30 86400
 	help
-	  Interval in seconds between temperature, humidity, pressure, and battery
-	  sensor readings. At 900s (15 min) with 1000 mAh battery this targets
-	  months of battery life.
+	  Period between environmental sensor reads (temperature, humidity,
+	  pressure, battery) while a GATT client is connected. Also the base
+	  period for the CCS811 read, scaled by SENSOR_AIR_QUALITY_DIVISOR.
 
 config SENSOR_AIR_QUALITY_DIVISOR
 	int "CCS811 read frequency divisor relative to main interval"
 	default 2
 	range 1 100
 	help
-	  CCS811 air quality (CO2/TVOC) is read once every N main sensor cycles.
-	  With SENSOR_ENV_INTERVAL_SEC=900 and divisor=2, CO2/TVOC updates every
-	  30 minutes. Higher values further reduce CCS811 power consumption at
-	  the cost of less frequent air quality updates.
+	  CCS811 is read once every N intervals of SENSOR_ENV_INTERVAL_SEC.
 
 source "Kconfig.zephyr"

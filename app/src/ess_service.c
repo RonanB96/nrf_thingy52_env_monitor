@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <errno.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <zephyr/bluetooth/att.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -15,24 +18,11 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "ess_encode.h"
 #include "ess_service.h"
 #include "sensor_manager.h"
 
 LOG_MODULE_REGISTER(ess_service, CONFIG_LOG_DEFAULT_LEVEL);
-
-/* ESS Trigger Setting conditions - Bluetooth SIG standard definitions */
-enum ess_trigger_condition {
-	ESS_TRIGGER_INACTIVE = 0x00,
-	ESS_TRIGGER_FIXED_TIME_INTERVAL = 0x01,
-	ESS_TRIGGER_NO_LESS_THAN_SPECIFIED_TIME = 0x02,
-	ESS_TRIGGER_VALUE_CHANGED = 0x03,
-	ESS_TRIGGER_LESS_THAN_REF_VALUE = 0x04,
-	ESS_TRIGGER_LESS_OR_EQUAL_TO_REF_VALUE = 0x05,
-	ESS_TRIGGER_GREATER_THAN_REF_VALUE = 0x06,
-	ESS_TRIGGER_GREATER_OR_EQUAL_TO_REF_VALUE = 0x07,
-	ESS_TRIGGER_EQUAL_TO_REF_VALUE = 0x08,
-	ESS_TRIGGER_NOT_EQUAL_TO_REF_VALUE = 0x09,
-};
 
 /* ESS Measurement Descriptor – Sampling Functions - Bluetooth SIG standard */
 enum ess_sampling_func {
@@ -61,23 +51,17 @@ _Static_assert((int)ESS_SAMPLING_COUNT <= UINT8_MAX,
 _Static_assert((int)ESS_APP_INDOOR <= UINT8_MAX,
 	       "ess_application must fit in uint8_t for BLE wire format");
 
-#define BT_UUID_CO2_CONCENTRATION_VAL  0x2B8C
-#define BT_UUID_TVOC_CONCENTRATION_VAL 0x2BE7
-
-#define BT_UUID_CO2_CONCENTRATION  BT_UUID_DECLARE_16(BT_UUID_CO2_CONCENTRATION_VAL)
-#define BT_UUID_TVOC_CONCENTRATION BT_UUID_DECLARE_16(BT_UUID_TVOC_CONCENTRATION_VAL)
-
-/* Sensor valid ranges according to Bluetooth SIG specifications */
-#define TEMP_LOWER_LIMIT     (-27315) /* -273.15°C in 0.01°C units (sint16) */
-#define TEMP_UPPER_LIMIT     32767    /* Max sint16 */
-#define HUMIDITY_LOWER_LIMIT 0U       /* 0% in 0.01% units (uint16) */
-#define HUMIDITY_UPPER_LIMIT 10000U   /* 100.00% in 0.01% units (uint16) */
-#define PRESSURE_LOWER_LIMIT 30000UL  /* 300.0 hPa = 30000 Pa in 0.1 Pa units (uint32) */
-#define PRESSURE_UPPER_LIMIT 120000UL /* 1200.0 hPa = 120000 Pa in 0.1 Pa units (uint32) */
-#define CO2_LOWER_LIMIT      400U     /* 400 ppm (uint16) */
-#define CO2_UPPER_LIMIT      5000U    /* 5000 ppm (uint16) */
-#define TVOC_LOWER_LIMIT     0U       /* 0 ppb (uint16) */
-#define TVOC_UPPER_LIMIT     32767U   /* Max for uint16 practical range */
+/* Sensor valid ranges (wire-format). Authoritative copies live in ess_encode.h. */
+#define TEMP_LOWER_LIMIT     ESS_TEMP_MIN_E_2C
+#define TEMP_UPPER_LIMIT     ESS_TEMP_MAX_E_2C
+#define HUMIDITY_LOWER_LIMIT ESS_HUM_MIN_E_2PCT
+#define HUMIDITY_UPPER_LIMIT ESS_HUM_MAX_E_2PCT
+#define PRESSURE_LOWER_LIMIT ESS_PRESS_MIN_DPA
+#define PRESSURE_UPPER_LIMIT ESS_PRESS_MAX_DPA
+#define CO2_LOWER_LIMIT      400U   /* 400 ppm (CCS811 floor) */
+#define CO2_UPPER_LIMIT      5000U  /* 5000 ppm (CCS811 ceiling) */
+#define TVOC_LOWER_LIMIT     0U     /* 0 ppb */
+#define TVOC_UPPER_LIMIT     32767U /* CCS811 advertised range */
 
 /* Environmental Sensing Service measurements - Bluetooth SIG ESS Standard */
 struct es_measurement {
@@ -130,23 +114,24 @@ struct ess_sensor {
 		meas;        /* ES Measurement Descriptor - describes how measurement is obtained */
 	bool notify_enabled; /* Client Characteristic Configuration - true if client enabled
 				notifications */
+	bool value_known;    /* True once the cached value came from a validated sensor reading. */
 };
 
 /* ESS sensors state */
 
-/* Initial/default sensor values and measurement uncertainty values (used in static initializers,
- * must be #define or enum -- not static const -- for file-scope struct initialization in C) */
-#define ESS_TEMP_DEFAULT_CDEG     2000   /* 20.00°C in 0.01°C units */
-#define ESS_HUM_DEFAULT_CPCNT     5000   /* 50.00% in 0.01% units */
-#define ESS_PRESS_DEFAULT_DPASCAL 101325 /* 1013.25 hPa in 0.1 Pa units */
+/* Measurement uncertainty values (used in static initializers, must be #define or enum -- not
+ * static const -- for file-scope struct initialization in C). */
 #define ESS_TEMP_UNCERTAINTY      0x32U  /* 50 x 0.01°C = ±0.50°C */
 #define ESS_HUM_UNCERTAINTY       0x32U  /* 50 x 0.01% = ±0.50%RH */
 #define ESS_PRESS_UNCERTAINTY     0x96U  /* 150 x 0.1 Pa = ±15.0 Pa */
 #define ESS_CO2_UNCERTAINTY       0x64U  /* 100 ppm */
 #define ESS_TVOC_UNCERTAINTY      0x32U  /* 50 ppb */
 
+#define ESS_PRESS_MIN_KPA 26.0f
+#define ESS_PRESS_MAX_KPA 126.0f
+
 static struct ess_sensor temperature_sensor = {
-	.value = ESS_TEMP_DEFAULT_CDEG, /* 20.00°C in 0.01°C units */
+	.value = ESS_UNKNOWN_S16,
 	.lower_limit = TEMP_LOWER_LIMIT,
 	.upper_limit = TEMP_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -161,10 +146,11 @@ static struct ess_sensor temperature_sensor = {
 			.meas_uncertainty = ESS_TEMP_UNCERTAINTY, /* ±0.50°C in 0.01°C units (50) */
 		},
 	.notify_enabled = false,
+	.value_known = false,
 };
 
 static struct ess_sensor humidity_sensor = {
-	.value = ESS_HUM_DEFAULT_CPCNT, /* 50.00% in 0.01% units */
+	.value = ESS_UNKNOWN_U16,
 	.lower_limit = HUMIDITY_LOWER_LIMIT,
 	.upper_limit = HUMIDITY_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -179,10 +165,11 @@ static struct ess_sensor humidity_sensor = {
 			.meas_uncertainty = ESS_HUM_UNCERTAINTY, /* ±0.50%RH in 0.01% units (50) */
 		},
 	.notify_enabled = false,
+	.value_known = false,
 };
 
 static struct ess_sensor pressure_sensor = {
-	.value = ESS_PRESS_DEFAULT_DPASCAL, /* 1013.25 hPa = 101325 Pa in 0.1 Pa units */
+	.value = 0,
 	.lower_limit = PRESSURE_LOWER_LIMIT,
 	.upper_limit = PRESSURE_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -199,10 +186,11 @@ static struct ess_sensor pressure_sensor = {
 							* 0.1 Pa = 15.0 Pa = 0.15 hPa) */
 		},
 	.notify_enabled = false,
+	.value_known = false,
 };
 
 static struct ess_sensor co2_sensor = {
-	.value = 0, /* 0 ppm - indicates sensor not ready/conditioning */
+	.value = ESS_UNKNOWN_U16, /* 0xFFFF - value not known (BT SIG) until CCS811 warmed up */
 	.lower_limit = CO2_LOWER_LIMIT,
 	.upper_limit = CO2_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -217,10 +205,11 @@ static struct ess_sensor co2_sensor = {
 			.meas_uncertainty = ESS_CO2_UNCERTAINTY, /* ±100 ppm (typical for CCS811) */
 		},
 	.notify_enabled = false,
+	.value_known = false,
 };
 
 static struct ess_sensor tvoc_sensor = {
-	.value = 0, /* 0 ppb - indicates sensor not ready/conditioning */
+	.value = ESS_UNKNOWN_U16, /* 0xFFFF - value not known (BT SIG) until CCS811 warmed up */
 	.lower_limit = TVOC_LOWER_LIMIT,
 	.upper_limit = TVOC_UPPER_LIMIT,
 	.condition = ESS_TRIGGER_VALUE_CHANGED,
@@ -236,6 +225,7 @@ static struct ess_sensor tvoc_sensor = {
 				ESS_TVOC_UNCERTAINTY, /* ±50 ppb (reasonable for TVOC sensor) */
 		},
 	.notify_enabled = false,
+	.value_known = false,
 };
 
 static bool ess_initialized = false;
@@ -250,59 +240,51 @@ enum ess_char_attr_idx {
 };
 
 /* ESS sensor conversion scale factors and conditioning constants */
-static const float ESS_TEMP_SCALE = 100.0f;             /* °C to 0.01°C units */
-static const float ESS_HUM_SCALE = 100.0f;              /* % to 0.01% units */
-static const float ESS_PRESS_HPA_TO_DPASCAL = 1000.0f;  /* hPa to 0.1 Pa units */
-static const uint32_t ESS_INT16_MASK = 0xFFFFU;         /* Mask for int16_t range */
-static const int64_t CCS811_CONDITIONING_MS = 300000LL; /* 5-minute conditioning in ms */
-static const int64_t ESS_MS_PER_SEC = 1000LL;           /* Milliseconds per second */
-
-/* Conversion helper functions - centralized data conversion logic */
-static int16_t convert_temperature_to_ble(float temp_celsius)
-{
-	int16_t result = (int16_t)(temp_celsius * ESS_TEMP_SCALE); /* Convert to 0.01°C units */
-	LOG_DBG("Temperature conversion: %.2f°C -> %d (0.01°C units)", (double)temp_celsius,
-		result);
-	return result;
-}
-
-static uint16_t convert_humidity_to_ble(float humidity_percent)
-{
-	uint16_t result = (uint16_t)(humidity_percent * ESS_HUM_SCALE); /* Convert to 0.01% units */
-	LOG_DBG("Humidity conversion: %.2f%% -> %u (0.01%% units)", (double)humidity_percent,
-		result);
-	return result;
-}
-
-static uint32_t convert_pressure_to_ble(float pressure_hpa)
-{
-	/* Convert hPa to Pa with 0.1 Pa resolution: hPa * 100 / 0.1 = hPa * 1000 */
-	uint32_t pressure_pa = (uint32_t)(pressure_hpa * ESS_PRESS_HPA_TO_DPASCAL);
-
-	/* Clamp to valid range */
-	if (pressure_pa < PRESSURE_LOWER_LIMIT) {
-		pressure_pa = PRESSURE_LOWER_LIMIT;
-	}
-	if (pressure_pa > PRESSURE_UPPER_LIMIT) {
-		pressure_pa = PRESSURE_UPPER_LIMIT;
-	}
-
-	LOG_DBG("Pressure conversion: %.1fhPa -> %u Pa (0.1Pa units)", (double)pressure_hpa,
-		pressure_pa);
-	return pressure_pa;
-}
-
-static uint16_t convert_co2_to_ble(uint16_t co2_ppm)
-{
-	return co2_ppm; /* Direct conversion - already in ppm */
-}
-
-static uint16_t convert_tvoc_to_ble(uint16_t tvoc_ppb)
-{
-	return tvoc_ppb; /* Direct conversion - already in ppb */
-}
+static const uint32_t ESS_INT16_MASK = 0xFFFFU;          /* Mask for int16_t range */
+static const int64_t CCS811_CONDITIONING_MS = 1200000LL; /* 20-minute conditioning */
+static const int64_t ESS_MS_PER_SEC = 1000LL;            /* Milliseconds per second */
 
 /* Helper functions */
+static void invalidate_sensor(struct ess_sensor *sensor)
+{
+	sensor->value_known = false;
+}
+
+static ssize_t ess_att_error_from_errno(int err)
+{
+	if (err == -ERANGE) {
+		return BT_GATT_ERR(BT_ATT_ERR_OUT_OF_RANGE);
+	}
+
+	return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+}
+
+static bool ess_temperature_in_range(float temp_celsius)
+{
+	return isfinite(temp_celsius) && temp_celsius >= -273.15f && temp_celsius <= 327.67f;
+}
+
+static bool ess_humidity_in_range(float humidity_percent)
+{
+	return isfinite(humidity_percent) && humidity_percent >= 0.0f && humidity_percent <= 100.0f;
+}
+
+static bool ess_pressure_in_range(float pressure_kpa)
+{
+	return isfinite(pressure_kpa) && pressure_kpa >= ESS_PRESS_MIN_KPA &&
+	       pressure_kpa <= ESS_PRESS_MAX_KPA;
+}
+
+static bool ess_co2_in_range(uint16_t co2_ppm)
+{
+	return co2_ppm >= CO2_LOWER_LIMIT && co2_ppm <= CO2_UPPER_LIMIT;
+}
+
+static bool ess_tvoc_in_range(uint16_t tvoc_ppb)
+{
+	return tvoc_ppb >= TVOC_LOWER_LIMIT && tvoc_ppb <= TVOC_UPPER_LIMIT;
+}
+
 static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 			uint16_t len, uint16_t offset)
 {
@@ -310,29 +292,69 @@ static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 
 	/* Trigger fresh sensor reading based on which characteristic is being read */
 	if (value_ptr == &temperature_sensor.value || value_ptr == &humidity_sensor.value) {
+		struct sensor_data fresh_data;
+		bool reading_temperature = (value_ptr == &temperature_sensor.value);
+		bool reading_humidity = (value_ptr == &humidity_sensor.value);
+		int ret;
+
 		/* Temperature or Humidity - trigger fresh temp/humidity sensor update */
-		int ret = sensor_manager_update_selective(SENSOR_TEMP_HUMIDITY);
-		if (ret == 0) {
-			/* Get fresh data and update local values using centralized conversion */
-			float temp = sensor_manager_get_temperature();
-			float humid = sensor_manager_get_humidity();
-			temperature_sensor.value = (int32_t)convert_temperature_to_ble(temp);
-			humidity_sensor.value = (int32_t)convert_humidity_to_ble(humid);
-			LOG_DBG("Fresh temp/humidity update: T=%.2f°C, H=%.1f%%", (double)temp,
-				(double)humid);
-		} else {
+		ret = sensor_manager_update_selective(SENSOR_TEMP_HUMIDITY);
+		if (ret != 0) {
 			LOG_WRN("Failed to trigger temp/humidity update: %d", ret);
+			invalidate_sensor(reading_temperature ? &temperature_sensor : &humidity_sensor);
+			return ess_att_error_from_errno(ret);
 		}
-	} else if (value_ptr == &pressure_sensor.value) {
-		/* Pressure - trigger fresh pressure sensor update */
-		int ret = sensor_manager_update_selective(SENSOR_PRESSURE);
-		if (ret == 0) {
-			float pressure = sensor_manager_get_pressure();
-			pressure_sensor.value = (int32_t)convert_pressure_to_ble(pressure);
-			LOG_DBG("Fresh pressure update: P=%.1fhPa", (double)pressure);
+
+		ret = sensor_manager_get_data(&fresh_data);
+		if (ret != 0) {
+			LOG_WRN("Failed to fetch temp/humidity data: %d", ret);
+			invalidate_sensor(reading_temperature ? &temperature_sensor : &humidity_sensor);
+			return ess_att_error_from_errno(ret);
+		}
+
+		if (SENSOR_DATA_IS_VALID(&fresh_data, SENSOR_TEMPERATURE)) {
+			if (!ess_temperature_in_range(fresh_data.temperature)) {
+				LOG_ERR("Temperature %.2f out of range", (double)fresh_data.temperature);
+				invalidate_sensor(&temperature_sensor);
+				if (reading_temperature) {
+					return ess_att_error_from_errno(-ERANGE);
+				}
+			} else {
+				temperature_sensor.value = (int32_t)ess_encode_temperature(fresh_data.temperature);
+				temperature_sensor.value_known = true;
+			}
 		} else {
-			LOG_WRN("Failed to trigger pressure update: %d", ret);
+			invalidate_sensor(&temperature_sensor);
+			if (reading_temperature) {
+				return ess_att_error_from_errno(-ENODATA);
+			}
 		}
+
+		if (SENSOR_DATA_IS_VALID(&fresh_data, SENSOR_HUMIDITY)) {
+			if (!ess_humidity_in_range(fresh_data.humidity)) {
+				LOG_ERR("Humidity %.2f out of range", (double)fresh_data.humidity);
+				invalidate_sensor(&humidity_sensor);
+				if (reading_humidity) {
+					return ess_att_error_from_errno(-ERANGE);
+				}
+			} else {
+				humidity_sensor.value = (int32_t)ess_encode_humidity(fresh_data.humidity);
+				humidity_sensor.value_known = true;
+			}
+		} else {
+			invalidate_sensor(&humidity_sensor);
+			if (reading_humidity) {
+				return ess_att_error_from_errno(-ENODATA);
+			}
+		}
+
+		LOG_DBG("Fresh temp/humidity update: T=%.2f°C, H=%.1f%%",
+			(double)fresh_data.temperature, (double)fresh_data.humidity);
+	}
+
+	if ((value_ptr == &temperature_sensor.value && !temperature_sensor.value_known) ||
+	    (value_ptr == &humidity_sensor.value && !humidity_sensor.value_known)) {
+		return ess_att_error_from_errno(-ENODATA);
 	}
 
 	/* Ensure value is within int16_t range before conversion */
@@ -345,13 +367,33 @@ static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 static ssize_t read_co2(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 			uint16_t len, uint16_t offset)
 {
-	/* Trigger fresh air quality update - just CO2/TVOC sensors */
-	sensor_manager_update_selective(SENSOR_AIR_QUALITY);
+	if (!sensor_manager_is_ccs811_ready()) {
+		/* CCS811 still conditioning - report 0xFFFF (value not known) per BT SIG */
+		co2_sensor.value = ESS_UNKNOWN_U16;
+		co2_sensor.value_known = true;
+	} else {
+		struct sensor_data fresh_data;
 
-	/* Update local CO2 value with fresh data using centralized conversion */
-	uint16_t co2 = sensor_manager_get_eco2();
-	co2_sensor.value = (int32_t)convert_co2_to_ble(co2);
-	LOG_DBG("Fresh CO2 update: %d ppm", co2);
+		sensor_manager_update_air_quality_for_ble();
+
+		int ret = sensor_manager_get_data(&fresh_data);
+		if (ret != 0 || !SENSOR_DATA_IS_VALID(&fresh_data, SENSOR_AIR_QUALITY)) {
+			LOG_WRN("Failed to fetch valid CO2 data: %d", ret);
+			invalidate_sensor(&co2_sensor);
+			return ess_att_error_from_errno(ret != 0 ? ret : -ENODATA);
+		}
+
+		if (!ess_co2_in_range(fresh_data.eco2)) {
+			LOG_ERR("CO2 %u out of range", fresh_data.eco2);
+			invalidate_sensor(&co2_sensor);
+			return ess_att_error_from_errno(-ERANGE);
+		}
+
+		uint16_t co2 = fresh_data.eco2;
+		co2_sensor.value = (int32_t)ess_encode_co2(co2);
+		co2_sensor.value_known = true;
+		LOG_DBG("Fresh CO2 update: %d ppm", co2);
+	}
 
 	/* Use the generic u16 read function for the actual data transfer */
 	return read_u16(conn, attr, buf, len, offset);
@@ -360,13 +402,33 @@ static ssize_t read_co2(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 static ssize_t read_tvoc(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
 			 uint16_t len, uint16_t offset)
 {
-	/* Trigger fresh air quality update - just CO2/TVOC sensors */
-	sensor_manager_update_selective(SENSOR_AIR_QUALITY);
+	if (!sensor_manager_is_ccs811_ready()) {
+		/* CCS811 still conditioning - report 0xFFFF (value not known) per BT SIG */
+		tvoc_sensor.value = ESS_UNKNOWN_U16;
+		tvoc_sensor.value_known = true;
+	} else {
+		struct sensor_data fresh_data;
 
-	/* Update local TVOC value with fresh data using centralized conversion */
-	uint16_t tvoc = sensor_manager_get_tvoc();
-	tvoc_sensor.value = (int32_t)convert_tvoc_to_ble(tvoc);
-	LOG_DBG("Fresh TVOC update: %d ppb", tvoc);
+		sensor_manager_update_air_quality_for_ble();
+
+		int ret = sensor_manager_get_data(&fresh_data);
+		if (ret != 0 || !SENSOR_DATA_IS_VALID(&fresh_data, SENSOR_AIR_QUALITY)) {
+			LOG_WRN("Failed to fetch valid TVOC data: %d", ret);
+			invalidate_sensor(&tvoc_sensor);
+			return ess_att_error_from_errno(ret != 0 ? ret : -ENODATA);
+		}
+
+		if (!ess_tvoc_in_range(fresh_data.tvoc)) {
+			LOG_ERR("TVOC %u out of range", fresh_data.tvoc);
+			invalidate_sensor(&tvoc_sensor);
+			return ess_att_error_from_errno(-ERANGE);
+		}
+
+		uint16_t tvoc = fresh_data.tvoc;
+		tvoc_sensor.value = (int32_t)ess_encode_tvoc(tvoc);
+		tvoc_sensor.value_known = true;
+		LOG_DBG("Fresh TVOC update: %d ppb", tvoc);
+	}
 
 	/* Use the generic u16 read function for the actual data transfer */
 	return read_u16(conn, attr, buf, len, offset);
@@ -379,14 +441,35 @@ static ssize_t read_u32(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 
 	/* Trigger fresh sensor reading for pressure */
 	if (value_ptr == &pressure_sensor.value) {
+		struct sensor_data fresh_data;
 		int ret = sensor_manager_update_selective(SENSOR_PRESSURE);
-		if (ret == 0) {
-			float pressure = sensor_manager_get_pressure();
-			pressure_sensor.value = (int32_t)convert_pressure_to_ble(pressure);
-			LOG_DBG("Fresh pressure update: P=%.1fhPa", (double)pressure);
-		} else {
+
+		if (ret != 0) {
 			LOG_WRN("Failed to trigger pressure update: %d", ret);
+			invalidate_sensor(&pressure_sensor);
+			return ess_att_error_from_errno(ret);
 		}
+
+		ret = sensor_manager_get_data(&fresh_data);
+		if (ret != 0 || !SENSOR_DATA_IS_VALID(&fresh_data, SENSOR_PRESSURE)) {
+			LOG_WRN("Failed to fetch valid pressure data: %d", ret);
+			invalidate_sensor(&pressure_sensor);
+			return ess_att_error_from_errno(ret != 0 ? ret : -ENODATA);
+		}
+
+		if (!ess_pressure_in_range(fresh_data.pressure)) {
+			LOG_ERR("Pressure %.3f kPa out of range", (double)fresh_data.pressure);
+			invalidate_sensor(&pressure_sensor);
+			return ess_att_error_from_errno(-ERANGE);
+		}
+
+		pressure_sensor.value = (int32_t)ess_encode_pressure(fresh_data.pressure);
+		pressure_sensor.value_known = true;
+		LOG_DBG("Fresh pressure update: P=%.3f kPa", (double)fresh_data.pressure);
+	}
+
+	if (!pressure_sensor.value_known) {
+		return ess_att_error_from_errno(-ENODATA);
 	}
 
 	/* Pressure is uint32 in Pascals with 0.1 Pa resolution */
@@ -516,7 +599,7 @@ BT_GATT_SERVICE_DEFINE(
 	BT_GATT_CCC(pressure_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 
 	/* CO2 Concentration Characteristic */
-	BT_GATT_CHARACTERISTIC(BT_UUID_CO2_CONCENTRATION, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+	BT_GATT_CHARACTERISTIC(BT_UUID_GATT_CO2CONC, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ, read_co2, NULL, &co2_sensor.value),
 	BT_GATT_DESCRIPTOR(BT_UUID_ES_MEASUREMENT, BT_GATT_PERM_READ, read_es_measurement, NULL,
 			   &co2_sensor.meas),
@@ -526,7 +609,7 @@ BT_GATT_SERVICE_DEFINE(
 	BT_GATT_CCC(co2_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 
 	/* TVOC Concentration Characteristic */
-	BT_GATT_CHARACTERISTIC(BT_UUID_TVOC_CONCENTRATION, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+	BT_GATT_CHARACTERISTIC(BT_UUID_GATT_VOCCONC, BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
 			       BT_GATT_PERM_READ, read_tvoc, NULL, &tvoc_sensor.value),
 	BT_GATT_DESCRIPTOR(BT_UUID_ES_MEASUREMENT, BT_GATT_PERM_READ, read_es_measurement, NULL,
 			   &tvoc_sensor.meas),
@@ -535,66 +618,15 @@ BT_GATT_SERVICE_DEFINE(
 			   &tvoc_sensor),
 	BT_GATT_CCC(tvoc_ccc_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), );
 
-/* Helper function to check if notification should be sent for 16-bit values */
-static bool should_notify_16(enum ess_trigger_condition condition, int16_t old_val, int16_t new_val,
-			     int16_t ref_val)
-{
-	switch (condition) {
-	case ESS_TRIGGER_INACTIVE:
-		return false;
-	case ESS_TRIGGER_VALUE_CHANGED:
-		return new_val != old_val;
-	case ESS_TRIGGER_LESS_THAN_REF_VALUE:
-		return new_val < ref_val;
-	case ESS_TRIGGER_LESS_OR_EQUAL_TO_REF_VALUE:
-		return new_val <= ref_val;
-	case ESS_TRIGGER_GREATER_THAN_REF_VALUE:
-		return new_val > ref_val;
-	case ESS_TRIGGER_GREATER_OR_EQUAL_TO_REF_VALUE:
-		return new_val >= ref_val;
-	case ESS_TRIGGER_EQUAL_TO_REF_VALUE:
-		return new_val == ref_val;
-	case ESS_TRIGGER_NOT_EQUAL_TO_REF_VALUE:
-		return new_val != ref_val;
-	default:
-		return false;
-	}
-}
-
-/* Helper function to check if notification should be sent for 32-bit values */
-static bool should_notify_32(enum ess_trigger_condition condition, int32_t old_val, int32_t new_val,
-			     int32_t ref_val)
-{
-	switch (condition) {
-	case ESS_TRIGGER_INACTIVE:
-		return false;
-	case ESS_TRIGGER_VALUE_CHANGED:
-		return new_val != old_val;
-	case ESS_TRIGGER_LESS_THAN_REF_VALUE:
-		return new_val < ref_val;
-	case ESS_TRIGGER_LESS_OR_EQUAL_TO_REF_VALUE:
-		return new_val <= ref_val;
-	case ESS_TRIGGER_GREATER_THAN_REF_VALUE:
-		return new_val > ref_val;
-	case ESS_TRIGGER_GREATER_OR_EQUAL_TO_REF_VALUE:
-		return new_val >= ref_val;
-	case ESS_TRIGGER_EQUAL_TO_REF_VALUE:
-		return new_val == ref_val;
-	case ESS_TRIGGER_NOT_EQUAL_TO_REF_VALUE:
-		return new_val != ref_val;
-	default:
-		return false;
-	}
-}
-
 /* Type-safe update functions for each sensor type */
 static void update_sensor_u16(struct ess_sensor *sensor, uint16_t new_value,
 			      const struct bt_gatt_attr *chrc_attr)
 {
-	bool notify = should_notify_16(sensor->condition, (int16_t)sensor->value,
-				       (int16_t)new_value, (int16_t)sensor->ref_val);
+	bool notify = ess_should_notify_16(sensor->condition, (int16_t)sensor->value,
+					   (int16_t)new_value, (int16_t)sensor->ref_val);
 
 	sensor->value = (int32_t)new_value;
+	sensor->value_known = true;
 
 	if (notify && sensor->notify_enabled) {
 		uint16_t value = sys_cpu_to_le16(new_value);
@@ -610,10 +642,11 @@ static void update_sensor_u16(struct ess_sensor *sensor, uint16_t new_value,
 static void update_sensor_i16(struct ess_sensor *sensor, int16_t new_value,
 			      const struct bt_gatt_attr *chrc_attr)
 {
-	bool notify = should_notify_16(sensor->condition, (int16_t)sensor->value, new_value,
-				       (int16_t)sensor->ref_val);
+	bool notify = ess_should_notify_16(sensor->condition, (int16_t)sensor->value, new_value,
+					   (int16_t)sensor->ref_val);
 
 	sensor->value = (int32_t)new_value;
+	sensor->value_known = true;
 
 	if (notify && sensor->notify_enabled) {
 		uint16_t value = sys_cpu_to_le16((uint16_t)new_value);
@@ -629,10 +662,11 @@ static void update_sensor_i16(struct ess_sensor *sensor, int16_t new_value,
 static void update_sensor_u32(struct ess_sensor *sensor, uint32_t new_value,
 			      const struct bt_gatt_attr *chrc_attr)
 {
-	bool notify = should_notify_32(sensor->condition, sensor->value, (int32_t)new_value,
-				       sensor->ref_val);
+	bool notify = ess_should_notify_32(sensor->condition, sensor->value, (int32_t)new_value,
+					   sensor->ref_val);
 
 	sensor->value = (int32_t)new_value;
+	sensor->value_known = true;
 
 	if (notify && sensor->notify_enabled) {
 		uint32_t value = sys_cpu_to_le32(new_value);
@@ -689,73 +723,101 @@ int ess_service_update(const struct sensor_data *data)
 
 	/* Update temperature (convert from °C to 0.01°C as per Bluetooth SIG spec) */
 	if ((data->valid_mask & SENSOR_TEMPERATURE) != 0) {
-		int16_t temp_value = convert_temperature_to_ble(data->temperature);
+		if (!ess_temperature_in_range(data->temperature)) {
+			invalidate_sensor(&temperature_sensor);
+			LOG_ERR("Temperature %.2f out of range", (double)data->temperature);
+			return -ERANGE;
+		}
+		int16_t temp_value = ess_encode_temperature(data->temperature);
 		update_sensor_i16(&temperature_sensor, temp_value,
 				  &ess_svc.attrs[ESS_ATTR_IDX_TEMPERATURE]);
+	} else {
+		invalidate_sensor(&temperature_sensor);
 	}
 
 	/* Update humidity using centralized conversion */
 	if ((data->valid_mask & SENSOR_HUMIDITY) != 0) {
-		uint16_t humid_value = convert_humidity_to_ble(data->humidity);
+		if (!ess_humidity_in_range(data->humidity)) {
+			invalidate_sensor(&humidity_sensor);
+			LOG_ERR("Humidity %.2f out of range", (double)data->humidity);
+			return -ERANGE;
+		}
+		uint16_t humid_value = ess_encode_humidity(data->humidity);
 		update_sensor_u16(&humidity_sensor, humid_value,
 				  &ess_svc.attrs[ESS_ATTR_IDX_HUMIDITY]);
+	} else {
+		invalidate_sensor(&humidity_sensor);
 	}
 
 	/* Update pressure using centralized conversion */
 	if ((data->valid_mask & SENSOR_PRESSURE) != 0) {
-		uint32_t pressure_pa = convert_pressure_to_ble(data->pressure);
+		if (!ess_pressure_in_range(data->pressure)) {
+			invalidate_sensor(&pressure_sensor);
+			LOG_ERR("Pressure %.3f kPa out of range", (double)data->pressure);
+			return -ERANGE;
+		}
+		uint32_t pressure_pa = ess_encode_pressure(data->pressure);
 		update_sensor_u32(&pressure_sensor, pressure_pa,
 				  &ess_svc.attrs[ESS_ATTR_IDX_PRESSURE]);
+	} else {
+		invalidate_sensor(&pressure_sensor);
 	}
 
 	/* Update CO2 concentration using centralized conversion */
 	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0 && sensor_manager_is_ccs811_ready()) {
+		if (!ess_co2_in_range(data->eco2) || !ess_tvoc_in_range(data->tvoc)) {
+			invalidate_sensor(&co2_sensor);
+			invalidate_sensor(&tvoc_sensor);
+			LOG_ERR("Air quality out of range: CO2=%u TVOC=%u", data->eco2, data->tvoc);
+			return -ERANGE;
+		}
 		/* CCS811 is ready and data is valid - use real reading */
-		uint16_t co2_value = convert_co2_to_ble(data->eco2);
+		uint16_t co2_value = ess_encode_co2(data->eco2);
 		update_sensor_u16(&co2_sensor, co2_value, &ess_svc.attrs[ESS_ATTR_IDX_CO2]);
 	} else if (!sensor_manager_is_ccs811_ready()) {
-		/* CCS811 is still conditioning - show 0 ppm to indicate sensor not ready */
-		uint16_t co2_value = convert_co2_to_ble(0);
-		update_sensor_u16(&co2_sensor, co2_value, &ess_svc.attrs[ESS_ATTR_IDX_CO2]);
+		/* CCS811 still conditioning - report 0xFFFF (value not known) per BT SIG */
+		update_sensor_u16(&co2_sensor, ESS_UNKNOWN_U16, &ess_svc.attrs[ESS_ATTR_IDX_CO2]);
+	} else {
+		invalidate_sensor(&co2_sensor);
 	}
 	/* If sensor is ready but data invalid, keep last valid reading */
 
 	/* Update TVOC concentration using centralized conversion */
 	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0 && sensor_manager_is_ccs811_ready()) {
 		/* CCS811 is ready and data is valid - use real reading */
-		uint16_t tvoc_value = convert_tvoc_to_ble(data->tvoc);
+		uint16_t tvoc_value = ess_encode_tvoc(data->tvoc);
 		update_sensor_u16(&tvoc_sensor, tvoc_value, &ess_svc.attrs[ESS_ATTR_IDX_TVOC]);
 	} else if (!sensor_manager_is_ccs811_ready()) {
-		/* CCS811 is still conditioning - show 0 ppb to indicate sensor not ready */
-		uint16_t tvoc_value = convert_tvoc_to_ble(0);
-		update_sensor_u16(&tvoc_sensor, tvoc_value, &ess_svc.attrs[ESS_ATTR_IDX_TVOC]);
+		/* CCS811 still conditioning - report 0xFFFF (value not known) per BT SIG */
+		update_sensor_u16(&tvoc_sensor, ESS_UNKNOWN_U16, &ess_svc.attrs[ESS_ATTR_IDX_TVOC]);
+	} else {
+		invalidate_sensor(&tvoc_sensor);
 	}
 	/* If sensor is ready but data invalid, keep last valid reading */
 
 	/* Log current values - show conditioning status for gas sensors */
 	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0) {
-		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.1fhPa(%.0fPa), CO2=%dppm, TVOC=%dppb",
+		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), CO2=%dppm, TVOC=%dppb",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
-			(double)(data->pressure * 100), data->eco2, data->tvoc);
+			(double)(data->pressure * 10.0f), data->eco2, data->tvoc);
 	} else if (sensor_manager_is_ccs811_ready()) {
-		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.1fhPa(%.0fPa), CO2/TVOC=sensor_error",
+		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), CO2/TVOC=sensor_error",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
-			(double)(data->pressure * 100));
+			(double)(data->pressure * 10.0f));
 	} else {
 		int64_t elapsed = k_uptime_get();
-		int64_t remaining_sec = (CCS811_CONDITIONING_MS - elapsed) /
-					ESS_MS_PER_SEC; /* 5 min conditioning */
+		int64_t remaining_sec = (CCS811_CONDITIONING_MS - elapsed) / ESS_MS_PER_SEC;
 		if (remaining_sec > 0) {
-			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.1fhPa(%.0fPa), "
+			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), "
 				"CO2/TVOC=conditioning(%ds)",
 				(double)data->temperature, (double)data->humidity,
-				(double)data->pressure, (double)(data->pressure * 100),
+				(double)data->pressure, (double)(data->pressure * 10.0f),
 				(int)remaining_sec);
 		} else {
-			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.1fhPa(%.0fPa), "
+			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), "
 				"CO2/TVOC=conditioning(finishing)",
 				(double)data->temperature, (double)data->humidity,
-				(double)data->pressure, (double)(data->pressure * 100));
+				(double)data->pressure, (double)(data->pressure * 10.0f));
 		}
 	}
 
@@ -764,25 +826,25 @@ int ess_service_update(const struct sensor_data *data)
 
 int ess_service_get_temperature(void)
 {
-	return temperature_sensor.value;
+	return temperature_sensor.value_known ? temperature_sensor.value : -ENODATA;
 }
 
 int ess_service_get_humidity(void)
 {
-	return humidity_sensor.value;
+	return humidity_sensor.value_known ? humidity_sensor.value : -ENODATA;
 }
 
 int ess_service_get_pressure(void)
 {
-	return pressure_sensor.value;
+	return pressure_sensor.value_known ? pressure_sensor.value : -ENODATA;
 }
 
 int ess_service_get_co2(void)
 {
-	return co2_sensor.value;
+	return co2_sensor.value_known ? co2_sensor.value : -ENODATA;
 }
 
 int ess_service_get_tvoc(void)
 {
-	return tvoc_sensor.value;
+	return tvoc_sensor.value_known ? tvoc_sensor.value : -ENODATA;
 }

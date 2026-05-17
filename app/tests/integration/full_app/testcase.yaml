@@ -1,0 +1,14 @@
+common:
+  tags:
+    - integration
+    - sensor_wrappers
+    - coverage
+
+tests:
+  thingy52.env_monitor.integration.full_app:
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    harness: ztest

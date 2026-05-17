@@ -15,6 +15,7 @@ basic build and flash. See [README.md](README.md) for the end-user quick-start.
 - [AI Agent Hardware Interaction](#ai-agent-hardware-interaction)
 - [CI Pipeline](#ci-pipeline)
 - [Contributing Workflow](#contributing-workflow)
+- [Power Budget](docs/low_power.md)
 
 ---
 
@@ -282,6 +283,83 @@ ZTEST(my_suite, test_example)
 ```
 
 Add the file to `app/tests/CMakeLists.txt` under `target_sources`.
+
+### Code Coverage
+
+Twister wires Zephyr's [native_sim coverage flow](https://docs.zephyrproject.org/latest/develop/test/coverage.html#coverage-reports-using-the-posix-architecture)
+end-to-end: pass `--coverage` and it sets `CONFIG_COVERAGE=y` for every
+test image, runs them, and post-processes the resulting `.gcda`/`.gcno`
+files with the tool of your choice
+([Twister docs](https://docs.zephyrproject.org/latest/develop/test/coverage.html#coverage-reports-using-twister)).
+
+#### One-command flow
+
+The `Coverage Report` VS Code task (or the equivalent commands below)
+runs the full suite and renders an **app-only** HTML report that includes
+an explicit audit of which `app/src/*.c` files are not exercised by any
+native_sim test:
+
+```bash
+source .venv/bin/activate && source env.sh
+rm -rf twister-out
+./modules/zephyr/scripts/twister \
+  -T app/tests \
+  -p native_sim \
+  --coverage \
+  --coverage-tool lcov \
+  --coverage-basedir "$PWD" \
+  --coverage-formats html \
+  --inline-logs
+
+./scripts/coverage_report.sh
+# open twister-out/coverage_app/index.html
+```
+
+`--coverage-basedir "$PWD"` is required to avoid path-mismatch drops
+in the merged tracefile (Zephyr issue
+[#83764](https://github.com/zephyrproject-rtos/zephyr/issues/83764), fixed
+in v4.1.0). Twister must be invoked from the workspace root.
+
+#### What the report contains
+
+`scripts/coverage_report.sh` filters `twister-out/coverage.info` down to
+`app/src/*` and `app/include/*`, renders HTML at
+`twister-out/coverage_app/index.html`, and prints a list of `app/src/*.c`
+files that were not linked into any native_sim test image. Those files
+are explicitly *out of scope* for native_sim coverage and must rely on
+the HIL suite under `app/tests/hardware/` for verification.
+
+#### Files exercised on native_sim
+
+The native_sim coverage path covers the application logic that does not
+depend on the Nordic SoC HAL or BLE controller binary. The thin sensor
+wrapper layer (`sensor_hts221_driver.c`, `sensor_lps22hb_driver.c`,
+`sensor_ccs811_driver.c`) is exercised by an integration test under
+`app/tests/integration/full_app/` that runs the upstream Zephyr sensor
+drivers against minimal in-tree I²C emul backends in `emul/`. The
+backends are deliberately register-table-only — they answer just enough
+traffic for the upstream drivers to pass `init` and report not-ready on
+data — see `app/tests/integration/full_app/emul/hts221_emul.c` for the
+documented rationale.
+
+#### Files NOT covered by native_sim
+
+The following are HIL-only and will appear in the audit list:
+
+| File | Reason |
+|------|--------|
+| `app/src/board.c` | Direct Nordic HAL access (`NRF_P0`, `nrf_gpio_pin_dir_get`); will not link or run on native_sim. |
+| `app/src/main.c` | System bring-up; covered by smoke tests on real hardware. |
+| `app/src/ble_advertiser.c` | BLE advertising stack; would need a HCI controller emul fixture not in scope. |
+| `app/src/battery_service.c` | ADC + voltage-divider backend; depends on Nordic SAADC. |
+
+These files are covered by `app/tests/hardware/` (HIL) which runs
+pass/fail on `thingy52/nrf52832` without coverage instrumentation
+(nRF52832's 64 KB RAM is below Zephyr's documented threshold for
+on-device gcov).
+
+> Requires `lcov` ≥ 1.14 (intermediate text format support, per the
+> Zephyr coverage docs).
 
 ---
 

@@ -1,0 +1,13 @@
+common:
+  tags:
+    - unit
+    - device_naming
+
+tests:
+  thingy52.env_monitor.unit.device_naming:
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    harness: ztest

@@ -20,6 +20,7 @@
 #include <zephyr/drivers/hwinfo.h>
 #include "ble_advertiser.h"
 #include "device_naming.h"
+#include "sensor_manager.h"
 
 LOG_MODULE_REGISTER(ble_advertiser, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -84,6 +85,9 @@ static void ble_disconnected(struct bt_conn *conn, uint8_t reason)
 	(void)conn;
 	LOG_INF("Device disconnected (reason %u)", reason);
 
+	/* Stop env sampling if this was the last client. CCS811 keeps running. */
+	sensor_manager_on_disconnected();
+
 	/* Note: Do not restart advertising here - connection object not yet freed.
 	 * Advertising will be restarted in the recycled callback when connection
 	 * object is actually freed and reusable.
@@ -110,6 +114,11 @@ static void ble_connected(struct bt_conn *conn, uint8_t err)
 	(void)conn;
 	LOG_INF("Device connected (err %d)", err);
 
+	if (err != 0) {
+		/* Connection setup failed; no client to sample for. */
+		return;
+	}
+
 	/* Stop advertising when connected */
 	if (advertising_enabled) {
 		int ret = bt_le_adv_stop();
@@ -120,6 +129,9 @@ static void ble_connected(struct bt_conn *conn, uint8_t err)
 			LOG_INF("Advertising stopped on connect");
 		}
 	}
+
+	/* Trigger an immediate env sample and start the env work loop. */
+	(void)sensor_manager_on_connected();
 }
 
 static struct bt_conn_cb conn_callbacks = {
@@ -177,6 +189,62 @@ static int update_advertisement_data(const struct ble_sensor_data *data)
 	return 0;
 }
 
+/**
+ * @brief Set a static BLE address based on hardware device ID
+ *
+ * Creates a deterministic static BLE address from the nRF52832's unique hardware ID.
+ * This ensures the device has the same address across power cycles.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+static int set_static_ble_address(void)
+{
+	int ret;
+	uint8_t device_id[BLE_DEVICE_ID_LEN];
+	bt_addr_le_t static_addr;
+	ssize_t id_len;
+
+	/* Get hardware device ID */
+	id_len = hwinfo_get_device_id(device_id, sizeof(device_id));
+	if (id_len <= 0) {
+		LOG_WRN("Failed to get device ID, using default address");
+		return 0;
+	}
+
+	/* Create a 48-bit static address from the device ID
+	 * Use the lower 6 bytes (48 bits) of the hardware ID
+	 * Format: BD_ADDR in little-endian byte order
+	 */
+	size_t bytes_to_use = MIN((size_t)id_len, 6U);
+	memcpy(static_addr.a.val, &device_id[0], bytes_to_use);
+
+	/* Pad with zeros if less than 6 bytes */
+	if (bytes_to_use < 6U) {
+		memset(&static_addr.a.val[bytes_to_use], 0, 6U - bytes_to_use);
+	}
+
+	/* Set address type to static random address (required for static addresses) */
+	static_addr.type = BT_ADDR_LE_RANDOM;
+
+	/* Ensure the address has the static address bits set (0xC0 in MSB)
+	 * Static random addresses must have bits [7:6] = 11b (0xC0)
+	 */
+	static_addr.a.val[5] |= 0xC0;
+
+	/* Create a new identity with the static address */
+	ret = bt_id_create(&static_addr, NULL);
+	if (ret < 0) {
+		LOG_ERR("Failed to create BLE identity with static address: %d", ret);
+		return ret;
+	}
+
+	LOG_INF("Static BLE address set: %02X:%02X:%02X:%02X:%02X:%02X",
+		static_addr.a.val[5], static_addr.a.val[4], static_addr.a.val[3],
+		static_addr.a.val[2], static_addr.a.val[1], static_addr.a.val[0]);
+
+	return 0;
+}
+
 static void bt_ready_cb(int err)
 {
 	LOG_INF("Bluetooth ready callback called with err=%d", err);
@@ -184,6 +252,13 @@ static void bt_ready_cb(int err)
 	if (err) {
 		LOG_ERR("Bluetooth init failed: %d", err);
 		return;
+	}
+
+	/* Set static address based on hardware device ID */
+	int ret = set_static_ble_address();
+	if (ret) {
+		LOG_WRN("Failed to configure static BLE address: %d", ret);
+		/* Continue anyway - Bluetooth will use controller default */
 	}
 
 	LOG_INF("Bluetooth initialized successfully, signaling semaphore");

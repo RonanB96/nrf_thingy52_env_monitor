@@ -25,8 +25,8 @@ static const uint8_t BATTERY_CRITICAL_THRESHOLD = 10U;
 static const uint8_t BLE_BAS_INIT_RETRY_MAX = 3U;
 static const uint32_t BLE_BAS_RETRY_DELAY_MS = 50U;
 static const uint32_t BLE_STACK_READY_DELAY_MS = 100U;
-static const uint8_t BATTERY_DEFAULT_LEVEL = 50U; /* Safe default when hardware not ready */
 static const uint8_t BATTERY_LEVEL_MAX = 100U;
+static struct k_work_delayable battery_poll_work;
 
 /* BLE Battery service state */
 static struct {
@@ -88,9 +88,26 @@ static void charging_status_changed(bool charging)
 	ble_battery_service_update();
 }
 
+static void battery_poll_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (!ble_battery_state.initialized) {
+		return;
+	}
+
+	int ret = ble_battery_service_update();
+	if (ret != 0 && ret != -ENODATA) {
+		LOG_WRN("Periodic BLE battery update failed: %d", ret);
+	}
+
+	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+}
+
 int ble_battery_service_init(void)
 {
 	LOG_INF("Initializing BLE Battery Service");
+	k_work_init_delayable(&battery_poll_work, battery_poll_work_handler);
 
 	/* Wait a bit for Bluetooth stack to be fully ready */
 	k_msleep((int32_t)BLE_STACK_READY_DELAY_MS);
@@ -107,15 +124,21 @@ int ble_battery_service_init(void)
 	/* Try to get initial battery level from hardware */
 	int bat_level_result = battery_service_get_level();
 	bool initial_charging = battery_service_is_charging();
-	uint8_t initial_level;
 
 	if (bat_level_result < 0) {
-		LOG_WRN("Hardware battery service not ready, using default values");
-		initial_level = BATTERY_DEFAULT_LEVEL; /* Safe default */
-		initial_charging = false;
-	} else {
-		initial_level = (uint8_t)bat_level_result;
+		/* BT SIG Battery Level (0x2A19) defines no "unknown" sentinel (0-100 only);
+		 * do not serve a fabricated value - skip BAS level update until real data
+		 * is available. charge_state stays BT_BAS_BLS_CHARGE_STATE_UNKNOWN. */
+		LOG_WRN("Hardware battery not ready (%d), deferring initial BAS level set",
+			bat_level_result);
+		battery_service_register_charging_callback(charging_status_changed);
+		ble_battery_state.initialized = true;
+		k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+		LOG_INF("BLE Battery Service initialized (level pending first ADC read)");
+		return 0;
 	}
+
+	uint8_t initial_level = (uint8_t)bat_level_result;
 
 	/* Set initial state */
 	ble_battery_state.level = initial_level;
@@ -149,6 +172,7 @@ int ble_battery_service_init(void)
 	battery_service_register_charging_callback(charging_status_changed);
 
 	ble_battery_state.initialized = true;
+	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
 	LOG_INF("BLE Battery Service initialized: %d%% (%s)", initial_level,
 		initial_charging ? "charging" : "discharging");
 
