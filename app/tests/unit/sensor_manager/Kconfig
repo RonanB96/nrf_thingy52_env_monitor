@@ -1,0 +1,16 @@
+# Inline the two app Kconfig symbols sensor_manager.c references so the
+# unit test does not pull in the whole application Kconfig (which has
+# `mainmenu` and `source "Kconfig.zephyr"` and is therefore not safely
+# composable into a test binary).
+
+config SENSOR_ENV_INTERVAL_SEC
+	int "Environmental sensor sampling interval (seconds)"
+	default 900
+	range 30 86400
+
+config SENSOR_AIR_QUALITY_DIVISOR
+	int "CCS811 read frequency divisor relative to main interval"
+	default 2
+	range 1 100
+
+source "Kconfig.zephyr"

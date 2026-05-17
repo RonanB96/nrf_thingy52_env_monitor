@@ -105,7 +105,8 @@ Values are readable from any BLE GATT client, including Nordic nRF Connect (mobi
 ## Developer Documentation
 
 See [DEVELOPER.md](DEVELOPER.md) for full environment setup, code style, linting, static
-analysis, and testing instructions.
+analysis, and testing instructions. See [docs/low_power.md](docs/low_power.md) for the
+configured operating points and current budget.
 
 ## Licence
 

@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) 2026 Eaton
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ *
+ * Devicetree fragment for the integration coverage test on native_sim.
+ *
+ * Mirrors the production thingy52 i2c0 sensor children, but binds them to
+ * native_sim's emulated i2c controller. The minimal i2c emul backends in
+ * ../emul/ answer just enough register traffic for the upstream HTS221 /
+ * LPS22HB / CCS811 drivers to pass init.
+ */
+
+/ {
+	gpio_emul_node: gpio_emul {
+		compatible = "zephyr,gpio-emul";
+		gpio-controller;
+		#gpio-cells = <2>;
+		status = "okay";
+	};
+
+	lps22hb_keys {
+		compatible = "gpio-keys";
+
+		lps22hb_int: lps22hb_int {
+			gpios = <&gpio_emul_node 23 0>;
+			label = "LPS22HB int";
+		};
+	};
+};
+
+&i2c0 {
+	hts221: hts221@5f {
+		compatible = "st,hts221";
+		reg = <0x5f>;
+		status = "okay";
+	};
+
+	lps22hb_press: lps22hb@5c {
+		compatible = "st,lps22hb-press";
+		reg = <0x5c>;
+		status = "okay";
+	};
+
+	ccs811: ccs811@5a {
+		compatible = "ams,ccs811";
+		reg = <0x5a>;
+		status = "okay";
+		irq-gpios = <&gpio_emul_node 22 0>;
+	};
+};

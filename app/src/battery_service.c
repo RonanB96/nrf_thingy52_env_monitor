@@ -36,13 +36,13 @@ static const struct gpio_dt_spec charge_status_gpio = GPIO_DT_SPEC_GET(CHARGE_ST
 static const uint32_t BATTERY_VOLTAGE_FULL_MV = 4200U;
 static const uint32_t BATTERY_VOLTAGE_EMPTY_MV = 3000U;
 static const uint8_t BATTERY_PERCENTAGE_MAX = 100U;
-static const uint8_t BATTERY_DEFAULT_PERCENT = 50U;
 static const double VOLTAGE_V_TO_MV = 1000.0;
 
 /* Battery monitoring data */
 struct battery_data {
 	uint8_t last_level;
 	bool initialized;
+	bool has_valid_reading;   /* true once a real ADC measurement has succeeded */
 	bool last_charging_state; /* Track last charging state for interrupt logging */
 	battery_charging_cb_t charging_changed_cb;
 };
@@ -223,6 +223,7 @@ static int battery_sample(void)
 		is_charging ? "(Charging)" : "");
 
 	bat_data.last_level = percentage;
+	bat_data.has_valid_reading = true;
 
 	return ret;
 }
@@ -280,12 +281,15 @@ int battery_service_init(void)
 	/* Mark as initialized */
 	bat_data.initialized = true;
 
-	/* Take an initial measurement to avoid reporting 0% initially */
+	/* Take an initial measurement */
 	ret = battery_sample();
 	if (ret != 0) {
-		LOG_WRN("Initial battery measurement failed (%d), will retry later", ret);
-		/* Set a reasonable default instead of 0 */
-		bat_data.last_level = BATTERY_DEFAULT_PERCENT;
+		LOG_WRN("Initial battery measurement failed (%d), level unavailable until next "
+			"read",
+			ret);
+		/* BT SIG Battery Level (0x2A19) defines no unknown sentinel (0-100 only, 101-255
+		 * are RFU) - do not serve a fabricated value; callers receive -ENODATA until the
+		 * first successful ADC reading. */
 	}
 
 	LOG_INF("Battery service initialized successfully");
@@ -297,6 +301,9 @@ int battery_service_get_level(void)
 	int err = battery_sample();
 	if (err != 0) {
 		LOG_ERR("Battery service failed to read a sample! %d", err);
+		if (!bat_data.has_valid_reading) {
+			return -ENODATA;
+		}
 		return err;
 	}
 

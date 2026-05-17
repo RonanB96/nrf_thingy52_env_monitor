@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#ifndef BLE_ADVERTISER_H
-#define BLE_ADVERTISER_H
+#ifndef BLE_ADVERTISER_H_
+#define BLE_ADVERTISER_H_
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -56,4 +56,4 @@ int ble_advertiser_stop(void);
 }
 #endif
 
-#endif /* BLE_ADVERTISER_H */
+#endif /* BLE_ADVERTISER_H_ */
