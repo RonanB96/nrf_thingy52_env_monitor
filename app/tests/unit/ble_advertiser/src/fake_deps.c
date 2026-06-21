@@ -38,3 +38,12 @@ int sensor_manager_on_connected(void)
 void sensor_manager_on_disconnected(void)
 {
 }
+
+int ble_battery_service_on_connected(void)
+{
+	return 0;
+}
+
+void ble_battery_service_on_disconnected(void)
+{
+}

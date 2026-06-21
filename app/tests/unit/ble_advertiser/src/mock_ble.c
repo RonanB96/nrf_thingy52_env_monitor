@@ -17,8 +17,8 @@
 #include "mock_ble.h"
 
 DEFINE_FAKE_VALUE_FUNC(int, bt_enable, bt_ready_cb_t);
-DEFINE_FAKE_VALUE_FUNC(int, bt_le_adv_start, const struct bt_le_adv_param *,
-		       const struct bt_data *, size_t, const struct bt_data *, size_t);
+DEFINE_FAKE_VALUE_FUNC(int, bt_le_adv_start, const struct bt_le_adv_param *, const struct bt_data *,
+		       size_t, const struct bt_data *, size_t);
 DEFINE_FAKE_VALUE_FUNC(int, bt_le_adv_stop);
 DEFINE_FAKE_VALUE_FUNC(int, bt_conn_cb_register, struct bt_conn_cb *);
 DEFINE_FAKE_VALUE_FUNC(int, bt_id_create, bt_addr_le_t *, uint8_t *);
@@ -63,5 +63,6 @@ void mock_ble_reset(void)
 	RESET_FAKE(z_impl_hwinfo_get_device_id);
 
 	bt_enable_fake.custom_fake = mock_ble_enable_success;
+	bt_id_create_fake.return_val = BT_ID_DEFAULT;
 	z_impl_hwinfo_get_device_id_fake.custom_fake = mock_hwinfo_zero_id;
 }

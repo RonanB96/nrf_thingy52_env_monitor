@@ -36,9 +36,9 @@ ZTEST(ble_advertiser, test_init_success)
 {
 	int ret = ble_advertiser_init();
 	zassert_ok(ret, "ble_advertiser_init: %d", ret);
+	zassert_equal(bt_id_create_fake.call_count, 1, "bt_id_create not called");
 	zassert_equal(bt_enable_fake.call_count, 1, "bt_enable not called");
-	zassert_equal(bt_conn_cb_register_fake.call_count, 1,
-		      "bt_conn_cb_register not called");
+	zassert_equal(bt_conn_cb_register_fake.call_count, 1, "bt_conn_cb_register not called");
 }
 
 ZTEST(ble_advertiser, test_init_bt_enable_failure)
@@ -65,8 +65,7 @@ ZTEST(ble_advertiser, test_start_success_after_init)
 
 	int ret = ble_advertiser_start(&fake_sensor_data);
 	zassert_ok(ret, "ble_advertiser_start: %d", ret);
-	zassert_true(bt_le_adv_start_fake.call_count >= 1,
-		     "adv_start should have been called");
+	zassert_true(bt_le_adv_start_fake.call_count >= 1, "adv_start should have been called");
 }
 
 ZTEST(ble_advertiser, test_start_retries_on_eagain)
@@ -76,13 +75,12 @@ ZTEST(ble_advertiser, test_start_retries_on_eagain)
 	/* First two attempts return EAGAIN, third succeeds. The production
 	 * code retries up to 5 times with backoff.
 	 */
-	int return_seq[] = { -EAGAIN, -EAGAIN, 0 };
+	int return_seq[] = {-EAGAIN, -EAGAIN, 0};
 	SET_RETURN_SEQ(bt_le_adv_start, return_seq, ARRAY_SIZE(return_seq));
 
 	int ret = ble_advertiser_start(&fake_sensor_data);
 	zassert_ok(ret, "expected eventual success after EAGAIN retries, got %d", ret);
-	zassert_equal(bt_le_adv_start_fake.call_count, 3,
-		      "expected 3 adv_start attempts, got %u",
+	zassert_equal(bt_le_adv_start_fake.call_count, 3, "expected 3 adv_start attempts, got %u",
 		      (unsigned)bt_le_adv_start_fake.call_count);
 }
 
@@ -109,8 +107,7 @@ ZTEST(ble_advertiser, test_stop_idempotent)
 	zassert_ok(ble_advertiser_stop(), "first stop");
 	uint32_t after_first = bt_le_adv_stop_fake.call_count;
 	zassert_ok(ble_advertiser_stop(), "second stop");
-	zassert_equal(bt_le_adv_stop_fake.call_count, after_first,
-		      "second stop should be a no-op");
+	zassert_equal(bt_le_adv_stop_fake.call_count, after_first, "second stop should be a no-op");
 }
 
 ZTEST(ble_advertiser, test_full_cycle_start_stop)
