@@ -47,10 +47,14 @@ jobs:
               with:
                   python-version: '3.12'
 
+            - name: Install clang-format-18
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y clang-format-18
+
             - name: Show tool versions
               run: |
-                  clang-format --version
-
+                  clang-format-18 --version
 
             - name: Check C formatting
               run: |
@@ -59,7 +63,7 @@ jobs:
                     echo "No C sources found"
                     exit 0
                   fi
-                  clang-format --dry-run --Werror "${files[@]}"
+                  clang-format-18 --dry-run --Werror "${files[@]}"
 
             - name: Lint workflow YAML
               run: |

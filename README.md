@@ -100,12 +100,12 @@ Values are readable from any BLE GATT client, including Nordic nRF Connect (mobi
 - Ensure `ZEPHYR_TOOLCHAIN_VARIANT=zephyr` for firmware builds.
 - After Kconfig or devicetree changes, run a pristine build: `west build -p always app`.
 - If SDK auto-detection fails, set `zephyr.sdk-install-dir` in local west config (see Quick Start above).
-- Check serial logs with `west attach` for sensor and BLE startup diagnostics.
 
 ## Developer Documentation
 
 See [DEVELOPER.md](DEVELOPER.md) for full environment setup, code style, linting, static
-analysis, and testing instructions.
+analysis, and testing instructions. See [docs/low_power.md](docs/low_power.md) for the
+configured operating points and current budget.
 
 ## Licence
 

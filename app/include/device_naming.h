@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef DEVICE_NAMING_SIMPLE_H
-#define DEVICE_NAMING_SIMPLE_H
+#ifndef DEVICE_NAMING_H_
+#define DEVICE_NAMING_H_
 
 #include <stddef.h>
 
@@ -39,4 +39,4 @@ int device_naming_get_name(char *name_buffer, size_t buffer_size);
 }
 #endif
 
-#endif /* DEVICE_NAMING_SIMPLE_H */
+#endif /* DEVICE_NAMING_H_ */

@@ -22,6 +22,7 @@ target_sources(app PRIVATE
 	src/battery_service.c
 	src/ble_battery_service.c
 	src/ess_service.c
+	src/ess_encode.c
 	src/uptime_service.c
 	src/device_naming.c
 	)

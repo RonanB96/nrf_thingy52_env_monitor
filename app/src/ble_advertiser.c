@@ -19,7 +19,9 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/hwinfo.h>
 #include "ble_advertiser.h"
+#include "ble_battery_service.h"
 #include "device_naming.h"
+#include "sensor_manager.h"
 
 LOG_MODULE_REGISTER(ble_advertiser, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -43,11 +45,14 @@ enum ad_data_index {
 static bool advertising_enabled = false;
 
 /* Timing and retry constants */
-#define BLE_DEVICE_ID_LEN        8U     /* hwinfo device ID buffer size */
-#define BLE_DEVICE_ID_BYTES_USED 4U     /* Bytes of HW ID used for unique name */
-#define BLE_DEVICE_NAME_LEN      32U    /* Max device name buffer size */
-#define BLE_BITS_PER_BYTE        8U     /* Bits in one byte (== CHAR_BIT) for packing loops */
-static const int BLE_ADV_RETRY_MAX = 5; /* Max advertising start retries */
+#define BLE_DEVICE_ID_LEN          8U    /* hwinfo device ID buffer size */
+#define BLE_DEVICE_ID_BYTES_USED   4U    /* Bytes of HW ID used for unique name */
+#define BLE_DEVICE_NAME_LEN        32U   /* Max device name buffer size */
+#define BLE_BITS_PER_BYTE          8U    /* Bits in one byte (== CHAR_BIT) for packing loops */
+#define BLE_ADDR_LEN               6U    /* Bluetooth LE address length in bytes */
+#define BLE_ADDR_MSB_IDX           5U    /* MSB index in bt_addr_le_t::a::val[] */
+#define BLE_STATIC_RANDOM_MSB_MASK 0xC0U /* Static random addr: top two bits set */
+static const int BLE_ADV_RETRY_MAX = 5;  /* Max advertising start retries */
 static const uint32_t BLE_CONTROLLER_INIT_DELAY_MS = 500U; /* Controller init settle time */
 static const uint32_t BLE_ADV_STOP_DELAY_MS = 100U;   /* Delay after stopping adv before restart */
 static const uint32_t BLE_ADV_BACKOFF_BASE_MS = 200U; /* Initial backoff for EAGAIN retry */
@@ -60,8 +65,11 @@ static K_SEM_DEFINE(bt_ready_sem, 0, 1);
 static const struct bt_le_adv_param adv_param = {
 	.id = BT_ID_DEFAULT,
 	.options = BT_LE_ADV_OPT_CONN,
-	.interval_min = BT_GAP_ADV_SLOW_INT_MIN,     /* 1.0 seconds (1600 * 0.625ms) */
-	.interval_max = BT_GAP_SCAN_SLOW_INTERVAL_2, /* 2.56 s */
+	.interval_min = BT_GAP_ADV_SLOW_INT_MIN, /* 1.0 s */
+	/* 2.56 s max: lower adv duty cycle than BT_GAP_ADV_SLOW_INT_MAX (1.2 s).
+	 * Reuses the scan-interval symbol; value is valid for advertising too.
+	 */
+	.interval_max = BT_GAP_SCAN_SLOW_INTERVAL_2,
 };
 
 /* Advertisement data structure - minimal data for device discovery */
@@ -83,6 +91,10 @@ static void ble_disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	(void)conn;
 	LOG_INF("Device disconnected (reason %u)", reason);
+
+	/* Stop env sampling if this was the last client. */
+	sensor_manager_on_disconnected();
+	ble_battery_service_on_disconnected();
 
 	/* Note: Do not restart advertising here - connection object not yet freed.
 	 * Advertising will be restarted in the recycled callback when connection
@@ -110,6 +122,11 @@ static void ble_connected(struct bt_conn *conn, uint8_t err)
 	(void)conn;
 	LOG_INF("Device connected (err %d)", err);
 
+	if (err != 0) {
+		/* Connection setup failed; no client to sample for. */
+		return;
+	}
+
 	/* Stop advertising when connected */
 	if (advertising_enabled) {
 		int ret = bt_le_adv_stop();
@@ -120,6 +137,10 @@ static void ble_connected(struct bt_conn *conn, uint8_t err)
 			LOG_INF("Advertising stopped on connect");
 		}
 	}
+
+	/* Trigger an immediate env sample and start the sensor work loops. */
+	(void)sensor_manager_on_connected();
+	(void)ble_battery_service_on_connected();
 }
 
 static struct bt_conn_cb conn_callbacks = {
@@ -177,6 +198,52 @@ static int update_advertisement_data(const struct ble_sensor_data *data)
 	return 0;
 }
 
+/**
+ * @brief Preset identity 0 with a static random address derived from hardware ID.
+ *
+ * Must run before bt_enable(). That makes BT_ID_DEFAULT use this address for
+ * advertising and connections, and (with CONFIG_BT_SETTINGS) causes stored
+ * identities in flash to be ignored in favour of the app-provided address.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+static int configure_static_ble_identity(void)
+{
+	int ret;
+	uint8_t device_id[BLE_DEVICE_ID_LEN];
+	bt_addr_le_t static_addr;
+	ssize_t id_len;
+
+	id_len = hwinfo_get_device_id(device_id, sizeof(device_id));
+	if (id_len <= 0) {
+		LOG_WRN("Failed to get device ID, using stack default address");
+		return 0;
+	}
+
+	size_t bytes_to_use = MIN((size_t)id_len, BLE_ADDR_LEN);
+
+	memcpy(static_addr.a.val, &device_id[0], bytes_to_use);
+	if (bytes_to_use < BLE_ADDR_LEN) {
+		memset(&static_addr.a.val[bytes_to_use], 0, BLE_ADDR_LEN - bytes_to_use);
+	}
+
+	static_addr.type = BT_ADDR_LE_RANDOM;
+	/* Static random addresses require bits [7:6] = 11b in the MSB. */
+	static_addr.a.val[BLE_ADDR_MSB_IDX] |= BLE_STATIC_RANDOM_MSB_MASK;
+
+	ret = bt_id_create(&static_addr, NULL);
+	if (ret < 0) {
+		LOG_ERR("Failed to preset BLE identity with static address: %d", ret);
+		return ret;
+	}
+
+	LOG_INF("Static BLE identity configured: %02X:%02X:%02X:%02X:%02X:%02X",
+		static_addr.a.val[5], static_addr.a.val[4], static_addr.a.val[3],
+		static_addr.a.val[2], static_addr.a.val[1], static_addr.a.val[0]);
+
+	return 0;
+}
+
 static void bt_ready_cb(int err)
 {
 	LOG_INF("Bluetooth ready callback called with err=%d", err);
@@ -199,6 +266,11 @@ int ble_advertiser_init(void)
 	int ret;
 
 	LOG_INF("Initializing BLE advertiser");
+
+	ret = configure_static_ble_identity();
+	if (ret) {
+		LOG_WRN("Static BLE identity not configured: %d", ret);
+	}
 
 	/* Enable Bluetooth with callback - all BLE operations happen in callback */
 	ret = bt_enable(bt_ready_cb);

@@ -1,6 +1,6 @@
 sample:
-  description: Bluetooth Mesh sensor sample
-  name: Bluetooth Mesh sensor
+  description: BLE Environmental Sensor (ESS, BAS, DIS) for Thingy:52
+  name: thingy52_env_monitor
 tests:
   sample.bluetooth.mesh.sensor_server:
     sysbuild: true

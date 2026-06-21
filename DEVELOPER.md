@@ -15,6 +15,7 @@ basic build and flash. See [README.md](README.md) for the end-user quick-start.
 - [AI Agent Hardware Interaction](#ai-agent-hardware-interaction)
 - [CI Pipeline](#ci-pipeline)
 - [Contributing Workflow](#contributing-workflow)
+- [Power Budget](docs/low_power.md)
 
 ---
 
@@ -37,12 +38,11 @@ sudo apt install --no-install-recommends git cmake ninja-build gperf \
   xz-utils file make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
 ```
 
-- `clang-format` and `clang-tidy` for linting. The repository `.clang-format` is a symlink to
-  `modules/zephyr/.clang-format`, so local formatting always tracks Zephyr upstream style.
+- `clang-format-18` and `clang-tidy` for linting (install via apt; same tool as CI).
+  The repository `.clang-format` tracks Zephyr upstream style.
 
 ```bash
-sudo apt install clang-format-14 clang-tidy
-sudo ln -sf /usr/bin/clang-format-14 /usr/local/bin/clang-format
+sudo apt install clang-format-18 clang-tidy
 ```
 
 ### Python Virtual Environment
@@ -138,20 +138,29 @@ A [`.clang-format`](.clang-format) file at the repository root enforces the abov
 ### Formatting a File
 
 ```bash
-clang-format -i app/src/<file>.c
+clang-format-18 -i app/src/<file>.c
 ```
 
 ### Formatting All Source Files (including tests)
 
 ```bash
-find app/src app/include app/tests/src -name '*.c' -o -name '*.h' | xargs clang-format -i
+find app/src app/include app/tests/src -name '*.c' -o -name '*.h' \
+  | xargs clang-format-18 -i
 ```
 
 ### Checking Without Modifying
 
+Same check as CI:
+
+```bash
+scripts/check_clang_format.sh
+```
+
+Or manually:
+
 ```bash
 find app/src app/include app/tests/src -name '*.c' -o -name '*.h' \
-  | xargs clang-format --dry-run --Werror
+  | xargs clang-format-18 --dry-run --Werror
 ```
 
 A non-zero exit code means at least one file needs formatting. Fix with the commands above.
@@ -283,6 +292,83 @@ ZTEST(my_suite, test_example)
 
 Add the file to `app/tests/CMakeLists.txt` under `target_sources`.
 
+### Code Coverage
+
+Twister wires Zephyr's [native_sim coverage flow](https://docs.zephyrproject.org/latest/develop/test/coverage.html#coverage-reports-using-the-posix-architecture)
+end-to-end: pass `--coverage` and it sets `CONFIG_COVERAGE=y` for every
+test image, runs them, and post-processes the resulting `.gcda`/`.gcno`
+files with the tool of your choice
+([Twister docs](https://docs.zephyrproject.org/latest/develop/test/coverage.html#coverage-reports-using-twister)).
+
+#### One-command flow
+
+The `Coverage Report` VS Code task (or the equivalent commands below)
+runs the full suite and renders an **app-only** HTML report that includes
+an explicit audit of which `app/src/*.c` files are not exercised by any
+native_sim test:
+
+```bash
+source .venv/bin/activate && source env.sh
+rm -rf twister-out
+./modules/zephyr/scripts/twister \
+  -T app/tests \
+  -p native_sim \
+  --coverage \
+  --coverage-tool lcov \
+  --coverage-basedir "$PWD" \
+  --coverage-formats html \
+  --inline-logs
+
+./scripts/coverage_report.sh
+# open twister-out/coverage_app/index.html
+```
+
+`--coverage-basedir "$PWD"` is required to avoid path-mismatch drops
+in the merged tracefile (Zephyr issue
+[#83764](https://github.com/zephyrproject-rtos/zephyr/issues/83764), fixed
+in v4.1.0). Twister must be invoked from the workspace root.
+
+#### What the report contains
+
+`scripts/coverage_report.sh` filters `twister-out/coverage.info` down to
+`app/src/*` and `app/include/*`, renders HTML at
+`twister-out/coverage_app/index.html`, and prints a list of `app/src/*.c`
+files that were not linked into any native_sim test image. Those files
+are explicitly *out of scope* for native_sim coverage and must rely on
+the HIL suite under `app/tests/hardware/` for verification.
+
+#### Files exercised on native_sim
+
+The native_sim coverage path covers the application logic that does not
+depend on the Nordic SoC HAL or BLE controller binary. The thin sensor
+wrapper layer (`sensor_hts221_driver.c`, `sensor_lps22hb_driver.c`,
+`sensor_ccs811_driver.c`) is exercised by an integration test under
+`app/tests/integration/full_app/` that runs the upstream Zephyr sensor
+drivers against minimal in-tree I²C emul backends in `emul/`. The
+backends are deliberately register-table-only — they answer just enough
+traffic for the upstream drivers to pass `init` and report not-ready on
+data — see `app/tests/integration/full_app/emul/hts221_emul.c` for the
+documented rationale.
+
+#### Files NOT covered by native_sim
+
+The following are HIL-only and will appear in the audit list:
+
+| File | Reason |
+|------|--------|
+| `app/src/board.c` | Direct Nordic HAL access (`NRF_P0`, `nrf_gpio_pin_dir_get`); will not link or run on native_sim. |
+| `app/src/main.c` | System bring-up; covered by smoke tests on real hardware. |
+| `app/src/ble_advertiser.c` | BLE advertising stack; would need a HCI controller emul fixture not in scope. |
+| `app/src/battery_service.c` | ADC + voltage-divider backend; depends on Nordic SAADC. |
+
+These files are covered by `app/tests/hardware/` (HIL) which runs
+pass/fail on `thingy52/nrf52832` without coverage instrumentation
+(nRF52832's 64 KB RAM is below Zephyr's documented threshold for
+on-device gcov).
+
+> Requires `lcov` ≥ 1.14 (intermediate text format support, per the
+> Zephyr coverage docs).
+
 ---
 
 ## AI Agent Hardware Interaction
@@ -296,14 +382,20 @@ hardware without human involvement.
 |------|-------|
 | Board | thingy52/nrf52832 |
 | Debugger | J-Link Ultra (S/N 505103055) |
-| Serial port | `/dev/ttyUSB[X]` at 115200 baud |
-| Hardware map | `hardware.map` (Twister format) |
+| Serial port | FTDI TTL232R on Thingy P0.02/P0.03 — cached in `.hardware/session` |
+| Hardware map | `hardware.map` (J-Link / board only; no UART path) |
+
+`/dev/ttyUSB*` numbers change when cables are replugged. Run
+`scripts/resolve_serial_port.sh` once per session; it discovers the port and
+writes `SERIAL_PORT` to `.hardware/session`. Re-run with `--refresh` after
+replugging the UART cable.
 
 Confirm the hardware is reachable:
 
 ```bash
 nrfutil device list
-ls -la /dev/ttyUSB[X]
+eval "$(scripts/resolve_serial_port.sh --export)"
+ls -la "$SERIAL_PORT"
 ```
 
 ### Flash firmware
@@ -324,7 +416,8 @@ output.  Use `scripts/serial_logger.py` — it stays open until explicitly kille
 
 **Terminal 1 — logger (start first):**
 ```bash
-python3 scripts/serial_logger.py /dev/ttyUSB[X] 115200 boot.log
+eval "$(scripts/resolve_serial_port.sh --export)"
+python3 scripts/serial_logger.py "$SERIAL_PORT" 115200 boot.log
 ```
 
 **Terminal 2 — flash:**
@@ -352,12 +445,12 @@ Expected output:
 === Thingy:52 Hardware Verification ===
 [1/4] Checking JLink...
   OK: JLink detected
-[2/4] Checking serial port /dev/ttyUSB1...
-  OK: /dev/ttyUSB1 accessible
+[2/4] Checking serial port /dev/ttyUSB0...
+  OK: /dev/ttyUSB0 accessible
 [3/4] Starting serial logger then flashing...
   OK: west flash succeeded
 [4/4] Verifying boot log...
-  OK: 'Booting BLE Env Monitor'
+  OK: 'Starting BLE Environmental Monitor'
   OK: 'sensor_manager: Sensor manager initialized'
   OK: 'ble_advertiser: Legacy advertising started successfully'
 
@@ -366,32 +459,34 @@ Expected output:
 
 ### Twister hardware testing
 
-The `hardware.map` file at the repository root describes the attached device
-in [Twister hardware-map format](https://docs.zephyrproject.org/latest/develop/test/twister.html#hardware-testing):
+The `hardware.map` file at the repository root describes the attached J-Link in
+[Twister hardware-map format](https://docs.zephyrproject.org/latest/develop/test/twister.html#hardware-testing).
+The UART port is not stored there; resolve it at runtime:
 
 ```yaml
 - connected: true
   id: '505103055'
   platform: thingy52/nrf52832
   runner: jlink
-  serial: /dev/ttyUSB[X]
-  baud: 115200
 ```
 
 To run hardware tests via Twister:
 
 ```bash
 source .venv/bin/activate && source env.sh
+eval "$(scripts/resolve_serial_port.sh --export)"
 ./modules/zephyr/scripts/twister \
   -T app/tests/hardware \
   --hardware-map hardware.map \
   --device-testing \
+  --device-serial "$SERIAL_PORT" \
+  --device-serial-baud 115200 \
   --inline-logs
 ```
 
 ### Permissions
 
-The current user must be in the `dialout` group to access `/dev/ttyUSB[X]`:
+The current user must be in the `dialout` group to access the UART device node:
 
 ```bash
 sudo usermod -aG dialout $USER   # then log out and back in
@@ -410,7 +505,7 @@ The CI pipeline uses three workflows running in the Zephyr public CI container
 
 `ci-static-analysis.yml` runs static checks only:
 
-1. `format-and-lint` (`clang-format`, `checkpatch`, `yamllint`, `actionlint`)
+1. `format-and-lint` (`clang-format-18`, `checkpatch`, `yamllint`, `actionlint`)
 2. `codechecker` (static analysis)
 
 `ci-build.yml` runs the standard firmware build.

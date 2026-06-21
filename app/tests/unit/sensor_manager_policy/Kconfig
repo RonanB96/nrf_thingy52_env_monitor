@@ -1,0 +1,7 @@
+# Application Kconfig fragment for the sensor_manager_policy unit suite.
+# The policy contract tests reference CONFIG_SENSOR_ENV_INTERVAL_SEC and
+# CONFIG_SENSOR_AIR_QUALITY_DIVISOR which are defined in app/Kconfig.
+# $(APPLICATION_SOURCE_DIR) resolves to this test project directory, so step up
+# three levels to reach app/.
+
+source "$(APPLICATION_SOURCE_DIR)/../../../Kconfig"

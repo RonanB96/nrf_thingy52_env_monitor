@@ -33,6 +33,14 @@ extern "C" {
 int ccs811_driver_init(const struct device *ccs811_dev);
 
 /**
+ * @brief Begin a connected sampling session (starts conditioning timer).
+ *
+ * Call when the first GATT client connects. Idempotent until disconnect and
+ * a full driver re-init.
+ */
+void ccs811_driver_begin_sampling_session(void);
+
+/**
  * @brief Check if CCS811 conditioning period is complete
  *
  * The CCS811 requires a conditioning period after power-on before

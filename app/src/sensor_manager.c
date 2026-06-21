@@ -28,14 +28,24 @@ LOG_MODULE_REGISTER(sensor_manager, CONFIG_LOG_DEFAULT_LEVEL);
 #define LPS22HB_NODE DT_NODELABEL(lps22hb_press)
 #define CCS811_NODE  DT_NODELABEL(ccs811)
 
+/*
+ * Power model — connection-driven sampling:
+ *   - One full read at boot (sensor_manager_init).
+ *   - One env + AQ read on each GATT connect (sensor_manager_on_connected).
+ *   - Optional periodic re-reads while connected (CONFIG_SENSOR_PERIODIC_SAMPLING).
+ *   - No reads while advertising without a client (except the boot sample).
+ */
+
 /* Static sensor data */
 static struct sensor_data current_data = {0};
 static sensor_update_callback_t update_callback = NULL;
 static bool initialized = false;
+static bool armed = false;
+static uint32_t connected_count;
 
-/* Periodic update work and timer */
-static struct k_work_delayable sensor_work;
-static bool periodic_enabled = false;
+/* Periodic work items */
+static struct k_work_delayable env_work;
+static struct k_work_delayable aq_work;
 
 /* I2C device for direct register access - used by driver modules */
 static const struct device *i2c_dev;
@@ -43,17 +53,24 @@ static const struct device *i2c_dev;
 /* Thread safety mutex for sensor operations */
 static K_MUTEX_DEFINE(sensor_manager_mutex);
 
-static void sensor_work_handler(struct k_work *work)
+static void env_work_handler(struct k_work *work)
 {
 	(void)work;
-	static uint32_t aq_cycle;
 
-	aq_cycle++;
-	if (aq_cycle % CONFIG_SENSOR_AIR_QUALITY_DIVISOR == 0) {
-		sensor_manager_update_selective(SENSOR_ENV_FULL);
-	} else {
-		sensor_manager_update_selective(SENSOR_ENV_BASIC);
+	sensor_manager_update_selective(SENSOR_ENV_BASIC);
+
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+	if (armed && connected_count > 0U) {
+		k_work_reschedule(&env_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
 	}
+#endif
+}
+
+static void aq_work_handler(struct k_work *work)
+{
+	(void)work;
+
+	sensor_manager_update_selective(SENSOR_AIR_QUALITY);
 
 	if (ccs811_driver_baseline_save_due()) {
 		int ret = ccs811_driver_save_baseline();
@@ -62,10 +79,12 @@ static void sensor_work_handler(struct k_work *work)
 		}
 	}
 
-	if (periodic_enabled) {
-		/* Reschedule for next reading */
-		k_work_reschedule(&sensor_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+	if (armed && connected_count > 0U) {
+		k_work_reschedule(&aq_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC *
+						      CONFIG_SENSOR_AIR_QUALITY_DIVISOR));
 	}
+#endif
 }
 
 static int read_temperature_humidity(void)
@@ -107,7 +126,7 @@ static int read_pressure(void)
 	if (ret == 0) {
 		current_data.pressure = pressure;
 		current_data.valid_mask |= SENSOR_PRESSURE;
-		LOG_DBG("Pressure: %.2f hPa", (double)pressure);
+		LOG_DBG("Pressure: %.3f kPa", (double)pressure);
 	} else {
 		current_data.valid_mask &= ~SENSOR_PRESSURE;
 		LOG_WRN("Failed to read LPS22HB: %d", ret);
@@ -259,13 +278,15 @@ int sensor_manager_init(void)
 
 	/* LPS22HB interrupt and semaphore are now handled within the driver */
 
-	/* Initialize work item unconditionally */
-	k_work_init_delayable(&sensor_work, sensor_work_handler);
+	/* Work items are scheduled only from sensor_manager_on_connected(). */
+	k_work_init_delayable(&env_work, env_work_handler);
+	k_work_init_delayable(&aq_work, aq_work_handler);
 
 	initialized = true;
 	LOG_INF("Sensor manager initialized");
 
-	sensor_manager_update();
+	/* One-shot boot sample to seed GATT/cache; periodic work waits for connect. */
+	(void)sensor_manager_update();
 
 	return 0;
 }
@@ -318,7 +339,7 @@ int sensor_manager_update(void)
 	sensor_update_callback_t local_cb = update_callback;
 	k_mutex_unlock(&sensor_manager_mutex);
 
-	LOG_INF("Sensor update: T=%.1f°C H=%.1f%% P=%.1fhPa CO2=%dppm TVOC=%dppb Bat=%d%%",
+	LOG_INF("Sensor update: T=%.1f°C H=%.1f%% P=%.3fkPa CO2=%dppm TVOC=%dppb Bat=%d%%",
 		(double)((local_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? local_data.temperature
 									   : 0.0f),
 		(double)((local_data.valid_mask & SENSOR_HUMIDITY) != 0 ? local_data.humidity
@@ -374,7 +395,7 @@ int sensor_manager_update_selective(enum sensor_select sensors)
 	sensor_update_callback_t local_cb = update_callback;
 	k_mutex_unlock(&sensor_manager_mutex);
 
-	LOG_DBG("Selective sensor update (0x%02x): T=%.1f°C H=%.1f%% P=%.1fhPa CO2=%dppm "
+	LOG_DBG("Selective sensor update (0x%02x): T=%.1f°C H=%.1f%% P=%.3fkPa CO2=%dppm "
 		"TVOC=%dppb Bat=%d%%",
 		sensors,
 		(double)((local_data.valid_mask & SENSOR_TEMPERATURE) != 0 ? local_data.temperature
@@ -396,27 +417,85 @@ int sensor_manager_update_selective(enum sensor_select sensors)
 
 int sensor_manager_register_callback(sensor_update_callback_t callback)
 {
+	int ret = k_mutex_lock(&sensor_manager_mutex, K_MSEC(100));
+	if (ret != 0) {
+		LOG_ERR("Failed to lock for callback registration: %d", ret);
+		return ret;
+	}
+
 	update_callback = callback;
+	k_mutex_unlock(&sensor_manager_mutex);
 	return 0;
 }
 
-int sensor_manager_start_periodic(uint32_t interval_ms)
+int sensor_manager_arm(void)
 {
 	if (!initialized) {
+		LOG_ERR("sensor_manager_arm: not initialized");
 		return -EINVAL;
 	}
 
-	periodic_enabled = true;
-	k_work_reschedule(&sensor_work, K_MSEC(interval_ms));
-	LOG_INF("Started periodic sensor readings every %d ms", interval_ms);
+	if (update_callback == NULL) {
+		LOG_ERR("sensor_manager_arm: no callback registered");
+		return -EINVAL;
+	}
+
+	armed = true;
+
+	LOG_INF("Sensor manager armed (sampling starts on GATT connect)");
 	return 0;
 }
 
-void sensor_manager_stop_periodic(void)
+int sensor_manager_on_connected(void)
 {
-	periodic_enabled = false;
-	k_work_cancel_delayable(&sensor_work);
-	LOG_INF("Stopped periodic sensor readings");
+	if (!armed) {
+		LOG_WRN("on_connected before arm() - ignored");
+		return -EINVAL;
+	}
+
+	connected_count++;
+	LOG_INF("GATT client connected (count=%u): connect sample", (unsigned int)connected_count);
+
+	if (connected_count == 1U) {
+		ccs811_driver_begin_sampling_session();
+	}
+
+	/* Take a fresh env sample first so current_data.temperature and
+	 * .humidity are up to date. read_air_quality() pulls those values for
+	 * CCS811 environmental compensation, so doing env before AQ refreshes
+	 * the compensation inputs the on-connect AQ read uses.
+	 *
+	 * Both reads are also what the first ESS notify after subscribe will
+	 * carry, so the client sees data no older than the I2C round-trip time.
+	 */
+	sensor_manager_update_selective(SENSOR_ENV_BASIC);
+	sensor_manager_update_selective(SENSOR_AIR_QUALITY);
+
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+	k_work_reschedule(&env_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+	k_work_reschedule(&aq_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC *
+					      CONFIG_SENSOR_AIR_QUALITY_DIVISOR));
+#endif
+	return 0;
+}
+
+void sensor_manager_on_disconnected(void)
+{
+	if (connected_count == 0U) {
+		LOG_WRN("on_disconnected with no tracked connections");
+		return;
+	}
+
+	connected_count--;
+	LOG_INF("GATT client disconnected (count=%u)", (unsigned int)connected_count);
+
+	if (connected_count == 0U) {
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+		k_work_cancel_delayable(&env_work);
+		k_work_cancel_delayable(&aq_work);
+#endif
+		LOG_INF("No clients - connect-driven sampling idle");
+	}
 }
 
 bool sensor_manager_is_ccs811_ready(void)

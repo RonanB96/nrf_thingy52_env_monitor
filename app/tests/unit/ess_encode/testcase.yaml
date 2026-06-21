@@ -1,0 +1,13 @@
+common:
+  tags:
+    - unit
+    - ess_encode
+
+tests:
+  thingy52.env_monitor.unit.ess_encode:
+    platform_allow:
+      - native_sim
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim
+    harness: ztest

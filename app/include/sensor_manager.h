@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#ifndef SENSOR_MANAGER_H
-#define SENSOR_MANAGER_H
+#ifndef SENSOR_MANAGER_H_
+#define SENSOR_MANAGER_H_
 
 #include <zephyr/kernel.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -104,34 +105,59 @@ int sensor_manager_update(void);
 int sensor_manager_update_selective(enum sensor_select sensors);
 
 /**
- * @brief Register callback for sensor updates
+ * @brief Register callback for sensor updates.
  *
- * @param callback Function to call when sensors are updated
- * @return 0 on success, negative error code on failure
+ * Must be called after sensor_manager_init() and before sensor_manager_arm().
+ * Currently a single global callback is supported (overwrites previous).
+ *
+ * @param callback Function to call when sensors are updated.
+ * @return 0 on success, negative error code on failure.
  */
 int sensor_manager_register_callback(sensor_update_callback_t callback);
 
 /**
- * @brief Start periodic sensor readings
+ * @brief Arm the sensor manager for connection-driven sampling.
  *
- * @param interval_ms Interval between readings in milliseconds
- * @return 0 on success, negative error code on failure
+ * Pre-conditions: sensor_manager_init() succeeded AND a callback has been
+ * registered. Returns -EINVAL if either is not true. By default the firmware
+ * samples at boot and on each connect; enable CONFIG_SENSOR_PERIODIC_SAMPLING
+ * for interval-based re-reads while connected.
+ *
+ * @return 0 on success, negative errno on failure.
  */
-int sensor_manager_start_periodic(uint32_t interval_ms);
+int sensor_manager_arm(void);
 
 /**
- * @brief Stop periodic sensor readings
+ * @brief Notify the sensor manager that a GATT client has connected.
+ *
+ * Triggers an immediate environmental sample, then an air-quality sample
+ * (env first so CCS811 compensation uses fresh temp/humidity). When
+ * CONFIG_SENSOR_PERIODIC_SAMPLING is enabled, also schedules env_work and
+ * aq_work at their configured intervals.
+ *
+ * Tracks an internal connection count: sampling continues until the last
+ * client disconnects.
+ *
+ * @return 0 on success, negative errno on failure.
  */
-void sensor_manager_stop_periodic(void);
+int sensor_manager_on_connected(void);
 
 /**
- * @brief Check if CCS811 conditioning period is complete
- * @return true if conditioning is complete, false otherwise
+ * @brief Notify the sensor manager that a GATT client has disconnected.
+ *
+ * Decrements the connection count; cancels periodic work when the last client
+ * is gone (only when CONFIG_SENSOR_PERIODIC_SAMPLING is enabled).
+ */
+void sensor_manager_on_disconnected(void);
+
+/**
+ * @brief Check if CCS811 conditioning period is complete.
+ * @return true if conditioning is complete, false otherwise.
  */
 bool sensor_manager_is_ccs811_ready(void);
 
 /**
- * @brief Get individual sensor readings (for BLE Mesh compatibility)
+ * @brief Individual sensor accessors (return last cached value or 0 if invalid).
  */
 float sensor_manager_get_temperature(void);
 float sensor_manager_get_humidity(void);
@@ -153,4 +179,4 @@ void sensor_manager_update_air_quality_for_ble(void);
 }
 #endif
 
-#endif /* SENSOR_MANAGER_H */
+#endif /* SENSOR_MANAGER_H_ */

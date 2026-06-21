@@ -9,6 +9,7 @@ Writes every received line to stdout and to log_file.
 import serial
 import signal
 import sys
+import time
 
 def main():
     if len(sys.argv) != 4:
@@ -26,12 +27,33 @@ def main():
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
 
-    s = serial.Serial(port, baud, timeout=0.5)
-    s.reset_input_buffer()
+    def open_port():
+        s = serial.Serial(port, baud, timeout=0.5)
+        s.dtr = True
+        s.rts = True
+        s.reset_input_buffer()
+        return s
+
+    s = open_port()
 
     with open(log_file, 'w') as f:
         while running:
-            line = s.readline()
+            try:
+                line = s.readline()
+            except serial.SerialException:
+                if not running:
+                    break
+                time.sleep(0.1)
+                try:
+                    s.close()
+                except serial.SerialException:
+                    pass
+                try:
+                    s = open_port()
+                except serial.SerialException:
+                    time.sleep(0.2)
+                continue
+
             if line:
                 text = line.decode('utf-8', errors='replace').strip()
                 print(text, flush=True)

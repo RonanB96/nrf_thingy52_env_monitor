@@ -22,11 +22,10 @@ LOG_MODULE_REGISTER(ble_battery_service, CONFIG_LOG_DEFAULT_LEVEL);
 static const uint8_t BATTERY_GOOD_THRESHOLD = 75U;
 static const uint8_t BATTERY_LOW_THRESHOLD = 25U;
 static const uint8_t BATTERY_CRITICAL_THRESHOLD = 10U;
-static const uint8_t BLE_BAS_INIT_RETRY_MAX = 3U;
-static const uint32_t BLE_BAS_RETRY_DELAY_MS = 50U;
 static const uint32_t BLE_STACK_READY_DELAY_MS = 100U;
-static const uint8_t BATTERY_DEFAULT_LEVEL = 50U; /* Safe default when hardware not ready */
 static const uint8_t BATTERY_LEVEL_MAX = 100U;
+static struct k_work_delayable battery_poll_work;
+static uint32_t connected_count;
 
 /* BLE Battery service state */
 static struct {
@@ -78,7 +77,7 @@ static void update_charge_state(bool charging)
 /* Callback function for charging status changes from hardware */
 static void charging_status_changed(bool charging)
 {
-	if (!ble_battery_state.initialized) {
+	if (!ble_battery_state.initialized || connected_count == 0U) {
 		return;
 	}
 
@@ -88,9 +87,28 @@ static void charging_status_changed(bool charging)
 	ble_battery_service_update();
 }
 
+static void battery_poll_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (!ble_battery_state.initialized || connected_count == 0U) {
+		return;
+	}
+
+	int ret = ble_battery_service_update();
+	if (ret != 0 && ret != -ENODATA) {
+		LOG_WRN("Periodic BLE battery update failed: %d", ret);
+	}
+
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+#endif
+}
+
 int ble_battery_service_init(void)
 {
 	LOG_INF("Initializing BLE Battery Service");
+	k_work_init_delayable(&battery_poll_work, battery_poll_work_handler);
 
 	/* Wait a bit for Bluetooth stack to be fully ready */
 	k_msleep((int32_t)BLE_STACK_READY_DELAY_MS);
@@ -104,55 +122,49 @@ int ble_battery_service_init(void)
 	bt_bas_bls_set_battery_charge_type(BT_BAS_BLS_CHARGE_TYPE_UNKNOWN);
 	bt_bas_bls_set_charging_fault_reason(BT_BAS_BLS_FAULT_REASON_NONE);
 
-	/* Try to get initial battery level from hardware */
-	int bat_level_result = battery_service_get_level();
-	bool initial_charging = battery_service_is_charging();
-	uint8_t initial_level;
-
-	if (bat_level_result < 0) {
-		LOG_WRN("Hardware battery service not ready, using default values");
-		initial_level = BATTERY_DEFAULT_LEVEL; /* Safe default */
-		initial_charging = false;
-	} else {
-		initial_level = (uint8_t)bat_level_result;
-	}
-
-	/* Set initial state */
-	ble_battery_state.level = initial_level;
-	ble_battery_state.charging = initial_charging;
-	update_charge_level(initial_level);
-	update_charge_state(initial_charging);
-
-	/* Set initial battery level in BAS with retry */
-	int ret;
-	for (int retry = 0; retry < BLE_BAS_INIT_RETRY_MAX; retry++) {
-		ret = bt_bas_set_battery_level(initial_level);
-		if (ret == 0) {
-			break; /* Success */
-		}
-		LOG_WRN("Failed to set battery level (attempt %d/3): %d", retry + 1, ret);
-		k_msleep((int32_t)BLE_BAS_RETRY_DELAY_MS); /* Wait and retry */
-	}
-
-	if (ret) {
-		LOG_ERR("Failed to set initial battery level after retries: %d", ret);
-		/* Don't fail initialization - the service can still be updated later */
-		LOG_WRN("Continuing with BLE Battery Service in degraded mode");
-	}
-
-	/* Update all BAS characteristics */
-	bt_bas_bls_set_battery_charge_state(ble_battery_state.charge_state);
-	bt_bas_bls_set_battery_charge_level(ble_battery_state.charge_level);
-	bt_bas_bls_set_wired_external_power_source(ble_battery_state.wired_power);
-
-	/* Register callback for charging status changes */
 	battery_service_register_charging_callback(charging_status_changed);
 
 	ble_battery_state.initialized = true;
-	LOG_INF("BLE Battery Service initialized: %d%% (%s)", initial_level,
-		initial_charging ? "charging" : "discharging");
+	LOG_INF("BLE Battery Service initialized (updates on GATT connect)");
+	return 0;
+}
 
-	return 0; /* Always return success to allow system to continue */
+int ble_battery_service_on_connected(void)
+{
+	if (!ble_battery_state.initialized) {
+		return -ENODEV;
+	}
+
+	connected_count++;
+	LOG_INF("GATT client connected (count=%u): starting BAS updates",
+		(unsigned int)connected_count);
+
+	int ret = ble_battery_service_update();
+	if (ret != 0 && ret != -ENODATA) {
+		LOG_WRN("Initial BLE battery update on connect failed: %d", ret);
+	}
+
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+	k_work_reschedule(&battery_poll_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+#endif
+	return 0;
+}
+
+void ble_battery_service_on_disconnected(void)
+{
+	if (connected_count == 0U) {
+		LOG_WRN("on_disconnected with no tracked connections");
+		return;
+	}
+
+	connected_count--;
+	LOG_INF("GATT client disconnected (count=%u)", (unsigned int)connected_count);
+
+	if (connected_count == 0U) {
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+		k_work_cancel_delayable(&battery_poll_work);
+#endif
+	}
 }
 
 int ble_battery_service_update(void)

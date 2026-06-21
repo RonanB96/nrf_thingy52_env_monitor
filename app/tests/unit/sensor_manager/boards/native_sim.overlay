@@ -1,0 +1,56 @@
+/*
+ * Copyright (c) 2024 Nordic Semiconductor ASA
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ *
+ * Devicetree fragment for unit-testing app/src/sensor_manager.c on
+ * native_sim.
+ *
+ * native_sim's base DTS already provides:
+ *   - i2c0  (zephyr,i2c-emul-controller, label "i2c0")  -> we extend it
+ *           with three placeholder sensor children so DEVICE_DT_GET()
+ *           resolves at link time. CONFIG_SENSOR=n means the actual sensor
+ *           drivers are not built in, so device_is_ready() returns false
+ *           for these nodes -- which is the path the unit tests assert.
+ *
+ * We add a gpio-emul controller for the lps22hb_int phandle reference
+ * (compile-time only; never reached at runtime since lps22hb_press is not
+ * ready when CONFIG_SENSOR=n).
+ */
+
+/ {
+	gpio_emul_node: gpio_emul {
+		compatible = "zephyr,gpio-emul";
+		gpio-controller;
+		#gpio-cells = <2>;
+		status = "okay";
+	};
+
+	lps22hb_keys {
+		compatible = "gpio-keys";
+
+		lps22hb_int: lps22hb_int {
+			gpios = <&gpio_emul_node 23 0>;
+			label = "LPS22HB int";
+		};
+	};
+};
+
+&i2c0 {
+	hts221: hts221@5f {
+		compatible = "st,hts221";
+		reg = <0x5f>;
+		status = "okay";
+	};
+
+	lps22hb_press: lps22hb@5c {
+		compatible = "st,lps22hb-press";
+		reg = <0x5c>;
+		status = "okay";
+	};
+
+	ccs811: ccs811@5a {
+		compatible = "ams,ccs811";
+		reg = <0x5a>;
+		status = "okay";
+	};
+};
