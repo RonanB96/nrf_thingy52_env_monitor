@@ -61,9 +61,11 @@ external
 .vscode/.cache
 .west/config.local
 
+.hardware/
 modules
 twister-out*/
 .codechecker*/
 .serena/
 reports/
 .tmp
+datasheets
