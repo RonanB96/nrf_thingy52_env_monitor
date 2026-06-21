@@ -7,10 +7,21 @@ mainmenu "BLE Environmental Sensor Configuration"
 config HAS_COVERAGE_SUPPORT
 	default y
 
+config SENSOR_PERIODIC_SAMPLING
+	bool "Periodic sensor sampling while connected"
+	default n
+	help
+	  When enabled, env and air-quality sensors are re-read on a timer for
+	  as long as at least one GATT client remains connected.
+
+	  When disabled (default), the firmware reads sensors once at boot and
+	  once on each new connection (plus on-demand via GATT read/notify).
+
 config SENSOR_ENV_INTERVAL_SEC
-	int "Environmental sensor sampling interval (seconds)"
+	int "Environmental sensor sampling interval in seconds"
 	default 900
 	range 30 86400
+	depends on SENSOR_PERIODIC_SAMPLING
 	help
 	  Period between environmental sensor reads (temperature, humidity,
 	  pressure, battery) while a GATT client is connected. Also the base
@@ -20,6 +31,7 @@ config SENSOR_AIR_QUALITY_DIVISOR
 	int "CCS811 read frequency divisor relative to main interval"
 	default 2
 	range 1 100
+	depends on SENSOR_PERIODIC_SAMPLING
 	help
 	  CCS811 is read once every N intervals of SENSOR_ENV_INTERVAL_SEC.
 

@@ -29,25 +29,11 @@ LOG_MODULE_REGISTER(sensor_manager, CONFIG_LOG_DEFAULT_LEVEL);
 #define CCS811_NODE  DT_NODELABEL(ccs811)
 
 /*
- * Power model:
- *   - env_work (HTS221 + LPS22HB + battery ADC): only runs while at least one
- *     GATT client is connected. No client means no consumer for the data, so
- *     we save energy by not sampling.
- *   - aq_work (CCS811 air quality): runs continuously regardless of connection
- *     state. The CCS811 must keep operating to preserve its conditioning state
- *     and 24h baseline persistence; powering it down would invalidate readings
- *     for hours after the next connect.
- *
- * Compensation freshness: while disconnected, env_work is not sampling so the
- * temperature/humidity values used by the CCS811 driver for environmental
- * compensation drift with the cached values. sensor_manager_on_connected()
- * runs an env read immediately before the on-connect AQ read, so every value
- * reported to a client is computed with compensation no older than one I2C
- * round-trip. Between samples while connected, env_work refreshes the
- * compensation inputs every CONFIG_SENSOR_ENV_INTERVAL_SEC.
- *
- * See docs/low_power.md for the full configured operating points and current
- * budget.
+ * Power model — connection-driven sampling:
+ *   - One full read at boot (sensor_manager_init).
+ *   - One env + AQ read on each GATT connect (sensor_manager_on_connected).
+ *   - Optional periodic re-reads while connected (CONFIG_SENSOR_PERIODIC_SAMPLING).
+ *   - No reads while advertising without a client (except the boot sample).
  */
 
 /* Static sensor data */
@@ -73,9 +59,11 @@ static void env_work_handler(struct k_work *work)
 
 	sensor_manager_update_selective(SENSOR_ENV_BASIC);
 
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
 	if (armed && connected_count > 0U) {
 		k_work_reschedule(&env_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
 	}
+#endif
 }
 
 static void aq_work_handler(struct k_work *work)
@@ -91,10 +79,12 @@ static void aq_work_handler(struct k_work *work)
 		}
 	}
 
-	if (armed) {
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
+	if (armed && connected_count > 0U) {
 		k_work_reschedule(&aq_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC *
 						      CONFIG_SENSOR_AIR_QUALITY_DIVISOR));
 	}
+#endif
 }
 
 static int read_temperature_humidity(void)
@@ -288,16 +278,15 @@ int sensor_manager_init(void)
 
 	/* LPS22HB interrupt and semaphore are now handled within the driver */
 
-	/* Initialize work items - neither is scheduled yet; sensor_manager_arm()
-	 * starts aq_work and sensor_manager_on_connected() starts env_work.
-	 */
+	/* Work items are scheduled only from sensor_manager_on_connected(). */
 	k_work_init_delayable(&env_work, env_work_handler);
 	k_work_init_delayable(&aq_work, aq_work_handler);
 
 	initialized = true;
 	LOG_INF("Sensor manager initialized");
 
-	sensor_manager_update();
+	/* One-shot boot sample to seed GATT/cache; periodic work waits for connect. */
+	(void)sensor_manager_update();
 
 	return 0;
 }
@@ -453,12 +442,7 @@ int sensor_manager_arm(void)
 
 	armed = true;
 
-	/* Start the always-on air-quality work loop. */
-	k_work_reschedule(&aq_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC *
-					      CONFIG_SENSOR_AIR_QUALITY_DIVISOR));
-
-	LOG_INF("Sensor manager armed (env on-connect, AQ continuous every %u s)",
-		(unsigned int)(CONFIG_SENSOR_ENV_INTERVAL_SEC * CONFIG_SENSOR_AIR_QUALITY_DIVISOR));
+	LOG_INF("Sensor manager armed (sampling starts on GATT connect)");
 	return 0;
 }
 
@@ -470,8 +454,11 @@ int sensor_manager_on_connected(void)
 	}
 
 	connected_count++;
-	LOG_INF("GATT client connected (count=%u): starting env sampling",
-		(unsigned int)connected_count);
+	LOG_INF("GATT client connected (count=%u): connect sample", (unsigned int)connected_count);
+
+	if (connected_count == 1U) {
+		ccs811_driver_begin_sampling_session();
+	}
 
 	/* Take a fresh env sample first so current_data.temperature and
 	 * .humidity are up to date. read_air_quality() pulls those values for
@@ -484,10 +471,11 @@ int sensor_manager_on_connected(void)
 	sensor_manager_update_selective(SENSOR_ENV_BASIC);
 	sensor_manager_update_selective(SENSOR_AIR_QUALITY);
 
-	/* Reschedule env work; reschedule is idempotent if it was already running
-	 * for an earlier connection.
-	 */
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
 	k_work_reschedule(&env_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC));
+	k_work_reschedule(&aq_work, K_SECONDS(CONFIG_SENSOR_ENV_INTERVAL_SEC *
+					      CONFIG_SENSOR_AIR_QUALITY_DIVISOR));
+#endif
 	return 0;
 }
 
@@ -502,8 +490,11 @@ void sensor_manager_on_disconnected(void)
 	LOG_INF("GATT client disconnected (count=%u)", (unsigned int)connected_count);
 
 	if (connected_count == 0U) {
+#if IS_ENABLED(CONFIG_SENSOR_PERIODIC_SAMPLING)
 		k_work_cancel_delayable(&env_work);
-		LOG_INF("No clients - env sampling stopped (AQ continues)");
+		k_work_cancel_delayable(&aq_work);
+#endif
+		LOG_INF("No clients - connect-driven sampling idle");
 	}
 }
 

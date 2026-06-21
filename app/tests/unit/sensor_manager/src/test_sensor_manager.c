@@ -462,8 +462,7 @@ ZTEST(sensor_manager, test_r10_compensation_passes_nan_when_temp_humidity_invali
 ZTEST(sensor_manager, test_s01_arm_requires_callback)
 {
 	/* before_each forced callback NULL. */
-	zassert_equal(sensor_manager_arm(), -EINVAL,
-		      "arm must reject when no callback registered");
+	zassert_equal(sensor_manager_arm(), -EINVAL, "arm must reject when no callback registered");
 }
 
 ZTEST(sensor_manager, test_s02_arm_succeeds_with_callback)
@@ -489,6 +488,8 @@ ZTEST(sensor_manager, test_s03_on_connected_after_arm_does_env_then_aq_update)
 	battery_service_get_level_fake.call_count = 0;
 
 	zassert_equal(sensor_manager_on_connected(), 0);
+	zassert_equal(ccs811_driver_begin_sampling_session_fake.call_count, 1,
+		      "first connect must start CCS811 sampling session");
 
 	/* MY contract per sensor_manager.c on_connected():
 	 *   update_selective(SENSOR_ENV_BASIC) -> hts221+lps22hb+battery x1
@@ -503,6 +504,31 @@ ZTEST(sensor_manager, test_s03_on_connected_after_arm_does_env_then_aq_update)
 
 	/* Bring the connection counter back to zero so subsequent tests start
 	 * from a clean lifecycle state. */
+	sensor_manager_on_disconnected();
+}
+
+ZTEST(sensor_manager, test_s04_on_disconnected_stops_further_reads_until_reconnect)
+{
+	zassert_equal(sensor_manager_register_callback(test_callback), 0);
+	zassert_equal(sensor_manager_arm(), 0);
+
+	hts221_driver_read_both_fake.custom_fake = read_both_valid;
+	lps22hb_driver_read_pressure_fake.custom_fake = read_pressure_valid;
+	ccs811_driver_read_air_quality_fake.custom_fake = read_aq_valid;
+	battery_service_get_level_fake.return_val = 70;
+
+	zassert_equal(sensor_manager_on_connected(), 0);
+	zassert_equal(hts221_driver_read_both_fake.call_count, 1);
+
+	sensor_manager_on_disconnected();
+
+	hts221_driver_read_both_fake.call_count = 0;
+	ccs811_driver_read_air_quality_fake.call_count = 0;
+
+	zassert_equal(sensor_manager_on_connected(), 0);
+	zassert_equal(hts221_driver_read_both_fake.call_count, 1);
+	zassert_equal(ccs811_driver_read_air_quality_fake.call_count, 1);
+
 	sensor_manager_on_disconnected();
 }
 
@@ -546,7 +572,6 @@ ZTEST(sensor_manager, test_t02_update_air_quality_for_ble_keeps_cache_on_failure
 	zassert_equal(sensor_manager_get_data(&after), 0);
 	zassert_true((after.valid_mask & SENSOR_AIR_QUALITY) != 0,
 		     "BLE-AQ failure must NOT clear cached SENSOR_AIR_QUALITY");
-	zassert_equal(after.eco2, before.eco2,
-		      "BLE-AQ failure must NOT alter cached eco2");
+	zassert_equal(after.eco2, before.eco2, "BLE-AQ failure must NOT alter cached eco2");
 	zassert_equal(after.tvoc, before.tvoc);
 }

@@ -95,9 +95,8 @@ int main(void)
 	}
 	LOG_INF("Environmental Sensing Service initialized");
 
-	/* Arm the sensor manager. Air-quality work starts immediately and runs
-	 * regardless of connection state; environmental work is gated on a GATT
-	 * client being connected (see sensor_manager_on_connected()).
+	/* Arm the sensor manager. All sensor sampling is gated on a GATT client
+	 * being connected (see sensor_manager_on_connected()).
 	 */
 	ret = sensor_manager_arm();
 	if (ret) {
@@ -114,14 +113,24 @@ int main(void)
 	}
 	LOG_INF("Uptime Service initialized");
 
-	/* Get initial sensor data (already read during sensor_manager_init) */
-	LOG_DBG("Getting initial sensor data");
+	/* Boot sample was taken during sensor_manager_init(); seed GATT caches. */
 	ret = sensor_manager_get_data(&sensor_data);
-	if (ret) {
-		LOG_ERR("Failed to get initial sensor data: %d", ret);
-		/* Use default values */
+	if (ret != 0) {
+		LOG_WRN("Failed to get boot sensor data: %d", ret);
 		memset(&sensor_data, 0, sizeof(sensor_data));
-		LOG_WRN("Using default sensor values");
+	}
+
+	if ((sensor_data.valid_mask & SENSOR_BATTERY) != 0) {
+		ret = ble_battery_service_update_manual(sensor_data.battery_level,
+							sensor_data.battery_charging);
+		if (ret != 0) {
+			LOG_WRN("Failed to seed BAS from boot sample: %d", ret);
+		}
+	}
+
+	ret = ess_service_update(&sensor_data);
+	if (ret != 0) {
+		LOG_WRN("Failed to seed ESS from boot sample: %d", ret);
 	}
 
 	/* Small delay to ensure Bluetooth stack is ready */
@@ -136,27 +145,11 @@ int main(void)
 	}
 	LOG_INF("BLE advertising started");
 
-	ret = ble_battery_service_update();
-	if (ret) {
-		LOG_WRN("Failed to update BLE Battery Service: %d", ret);
-	} else {
-		LOG_DBG("BLE Battery Service updated successfully");
-	}
-
-	/* Update Environmental Sensing Service with initial data */
-	LOG_DBG("Updating Environmental Sensing Service with initial data");
-	ret = ess_service_update(&sensor_data);
-	if (ret) {
-		LOG_WRN("Failed to update ESS with initial data: %d", ret);
-	} else {
-		LOG_DBG("Environmental Sensing Service updated with initial data");
-	}
-
 	/* Print GPIO pin states again - after GPIO hogs should be applied */
 	LOG_INF("=== GPIO States AFTER hog initialization delay ===");
 	board_print_pin_states();
 
-	LOG_INF("System initialized - Environmental monitoring active");
+	LOG_INF("System initialized - advertising (sensor sampling on connect)");
 
 	return 0;
 }

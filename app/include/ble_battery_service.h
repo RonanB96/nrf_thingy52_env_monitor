@@ -26,6 +26,22 @@ extern "C" {
 int ble_battery_service_init(void);
 
 /**
+ * @brief Notify the BLE Battery Service that a GATT client has connected.
+ *
+ * Reads hardware battery state and starts the periodic BAS update loop.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+int ble_battery_service_on_connected(void);
+
+/**
+ * @brief Notify the BLE Battery Service that a GATT client has disconnected.
+ *
+ * Stops the periodic BAS update loop when the last client disconnects.
+ */
+void ble_battery_service_on_disconnected(void);
+
+/**
  * @brief Update BLE battery service from hardware
  *
  * Reads current battery level and charging status from the hardware

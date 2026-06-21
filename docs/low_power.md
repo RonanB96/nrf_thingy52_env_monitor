@@ -19,14 +19,16 @@ Anything else would be guesswork.
 | Item                          | Value                                                                | Source                                                                                              |
 | ----------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Advertising type              | Legacy connectable, 1 Mbps                                           | [`app/src/ble_advertiser.c`](../app/src/ble_advertiser.c) (`adv_param`)                             |
-| Advertising interval          | `BT_GAP_ADV_SLOW_INT_MIN` … `BT_GAP_SCAN_SLOW_INTERVAL_2`            | [`app/src/ble_advertiser.c`](../app/src/ble_advertiser.c)                                           |
+| Advertising interval          | 1.0 … 2.56 s (`BT_GAP_ADV_SLOW_INT_MIN` … `BT_GAP_SCAN_SLOW_INTERVAL_2`) | [`app/src/ble_advertiser.c`](../app/src/ble_advertiser.c) — longer max lowers adv duty cycle   |
 | TX power Kconfig              | `CONFIG_BT_CTLR_TX_PWR_0=y`                                          | [`app/prj.conf`](../app/prj.conf)                                                                   |
-| LE Privacy (RPA)              | enabled                                                              | [`app/prj.conf`](../app/prj.conf) (`CONFIG_BT_CTLR_PRIVACY=y`)                                      |
-| Env sample period (connected) | `CONFIG_SENSOR_ENV_INTERVAL_SEC` (default 900 s)                     | [`app/Kconfig`](../app/Kconfig)                                                                     |
-| Env sampling (disconnected)   | suspended                                                            | [`app/src/sensor_manager.c`](../app/src/sensor_manager.c) — `env_work` gated by `connected_count`   |
-| CCS811 sample period          | `CONFIG_SENSOR_ENV_INTERVAL_SEC × CONFIG_SENSOR_AIR_QUALITY_DIVISOR` | [`app/Kconfig`](../app/Kconfig)                                                                     |
-| CCS811 conditioning window    | enforced for the first 20 min after boot                             | [`app/src/sensor_ccs811_driver.c`](../app/src/sensor_ccs811_driver.c)                               |
-| CCS811 baseline persistence   | NVS write every 24 h                                                 | [`app/src/sensor_ccs811_driver.c`](../app/src/sensor_ccs811_driver.c)                               |
+| LE Privacy (RPA)              | disabled (static random address from HW ID)                          | [`app/prj.conf`](../app/prj.conf) (`CONFIG_BT_CTLR_PRIVACY=n`)                                      |
+| Connection interval (PPCP)    | 4000 ms, latency 80, timeout 655 s (Kconfig max)                   | [`app/boards/thingy52.conf`](../app/boards/thingy52.conf) — central may negotiate differently  |
+| Periodic connected sampling   | off by default (`CONFIG_SENSOR_PERIODIC_SAMPLING=n`)                 | [`app/Kconfig`](../app/Kconfig)                                                                     |
+| Env sample period (optional)  | `CONFIG_SENSOR_ENV_INTERVAL_SEC` (900 s when periodic enabled)       | [`app/Kconfig`](../app/Kconfig)                                                                     |
+| AQ sample period (optional)   | base × `CONFIG_SENSOR_AIR_QUALITY_DIVISOR` when periodic enabled     | [`app/Kconfig`](../app/Kconfig)                                                                     |
+| Sampling while disconnected   | one boot sample only (cache seed)                                    | [`app/src/sensor_manager.c`](../app/src/sensor_manager.c)                                           |
+| CCS811 conditioning window    | 20 min from first GATT connect (`ccs811_driver_begin_sampling_session`) | [`app/src/sensor_ccs811_driver.c`](../app/src/sensor_ccs811_driver.c)                    |
+| CCS811 baseline persistence   | NVS write every 24 h (only during periodic AQ work)                   | [`app/src/sensor_ccs811_driver.c`](../app/src/sensor_ccs811_driver.c)                               |
 | MPU / microphone power rails  | held off (HIL-verified)                                              | [`app/tests/hardware/src/test_hil_power_rails.c`](../app/tests/hardware/src/test_hil_power_rails.c) |
 
 Numerical interpretations of the symbolic Kconfig / Zephyr macros (e.g. what
@@ -34,31 +36,33 @@ microseconds `BT_GAP_ADV_SLOW_INT_MIN` evaluates to, or which dBm value
 `CONFIG_BT_CTLR_TX_PWR_0` selects on this SoC) must be cross-checked against
 the Zephyr source actually built into the firmware before being repeated here.
 
-## Sampling policy (connection-driven)
+## Sampling policy (default: boot + connect)
 
-[`sensor_manager`](../app/src/sensor_manager.c) runs two independent work
-items:
+[`sensor_manager`](../app/src/sensor_manager.c) and
+[`ble_battery_service`](../app/src/ble_battery_service.c) read sensors **once at
+boot** and **once on each GATT connect** by default. Interval-based re-reads
+while connected require `CONFIG_SENSOR_PERIODIC_SAMPLING=y`.
 
-- `env_work` — HTS221, LPS22HB, battery ADC. Started by
-  `sensor_manager_on_connected()`, cancelled by
-  `sensor_manager_on_disconnected()` when `connected_count` falls to zero.
-  No I²C traffic on these sensors while purely advertising.
-- `aq_work` — CCS811. Started by `sensor_manager_arm()` and never stopped.
-  The CCS811 must keep running to preserve its conditioning state and 24 h
-  baseline.
+- `sensor_manager_init()` — one full sensor read at boot.
+- `sensor_manager_on_connected()` — immediate env sample, then AQ sample.
+- `CONFIG_SENSOR_PERIODIC_SAMPLING` — when enabled, starts `env_work`,
+  `aq_work`, and BAS poll loops at the configured intervals until disconnect.
+- `ble_battery_service_on_connected()` — one BAS hardware read on connect;
+  periodic BAS poll only when `CONFIG_SENSOR_PERIODIC_SAMPLING=y`.
 
-On every new connection the manager runs an env read **before** the AQ read so
-the CCS811 environmental compensation uses fresh temp/humidity, and the first
-ESS notify after subscribe carries data no older than the I²C round-trip time.
+On every connect the manager runs env **before** AQ so CCS811 compensation uses
+fresh temp/humidity.
 
-## Connected vs disconnected behaviour
+## Connected vs disconnected behaviour (default config)
 
-| State                           | HTS221 / LPS22HB / battery                                                               | CCS811                    |
-| ------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------- |
-| Disconnected (advertising only) | not sampled (`env_work` cancelled)                                                       | sampled at base × divisor |
-| Connected                       | sampled every `CONFIG_SENSOR_ENV_INTERVAL_SEC`                                           | unchanged                 |
-| Connect transition              | one immediate env read, then one immediate AQ read using the just-refreshed compensation | —                         |
-| Disconnect transition           | `env_work` cancelled when `connected_count == 0`                                         | unchanged                 |
+| State                           | HTS221 / LPS22HB / battery | CCS811 | BAS ADC reads |
+| ------------------------------- | -------------------------- | ------ | ------------- |
+| Boot                            | one sample                 | one sample | seeded from boot sample |
+| Disconnected (advertising)      | no further reads           | no further reads | no reads |
+| Connect transition              | immediate env sample       | immediate AQ after env | one read on connect |
+| Connected (default)             | no periodic reads          | no periodic reads | no periodic reads |
+| Connected (`PERIODIC_SAMPLING`) | every `CONFIG_SENSOR_ENV_INTERVAL_SEC` | every base × divisor | same interval |
+| Disconnect                      | —                          | —      | poll cancelled (if periodic) |
 
 ## Per-state current
 
@@ -93,5 +97,5 @@ table.
 - Average / peak advertising current at the configured interval and TX power.
 - Energy per HTS221 / LPS22HB / SAADC read burst.
 - Energy per CCS811 measurement at its production drive mode.
-- Energy per CCS811 NVS baseline write (every 24 h).
+- Energy per CCS811 NVS baseline save (every 24 h).
 - Battery life on the on-board cell with default Kconfig values.

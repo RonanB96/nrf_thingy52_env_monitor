@@ -116,14 +116,12 @@ int sensor_manager_update_selective(enum sensor_select sensors);
 int sensor_manager_register_callback(sensor_update_callback_t callback);
 
 /**
- * @brief Arm the periodic sampling work items.
+ * @brief Arm the sensor manager for connection-driven sampling.
  *
  * Pre-conditions: sensor_manager_init() succeeded AND a callback has been
- * registered. Returns -EINVAL if either is not true. Once armed:
- *   - The air-quality (CCS811) work item runs continuously to preserve the
- *     sensor's conditioning state and 24h baseline persistence.
- *   - The environmental work item (HTS221, LPS22HB, battery ADC) is dormant
- *     until sensor_manager_on_connected() is called.
+ * registered. Returns -EINVAL if either is not true. By default the firmware
+ * samples at boot and on each connect; enable CONFIG_SENSOR_PERIODIC_SAMPLING
+ * for interval-based re-reads while connected.
  *
  * @return 0 on success, negative errno on failure.
  */
@@ -132,11 +130,12 @@ int sensor_manager_arm(void);
 /**
  * @brief Notify the sensor manager that a GATT client has connected.
  *
- * Triggers an immediate environmental sample so the first notify after
- * subscribe carries fresh data, then schedules the env work item to run at
- * CONFIG_SENSOR_ENV_INTERVAL_SEC for the duration of the connection.
+ * Triggers an immediate environmental sample, then an air-quality sample
+ * (env first so CCS811 compensation uses fresh temp/humidity). When
+ * CONFIG_SENSOR_PERIODIC_SAMPLING is enabled, also schedules env_work and
+ * aq_work at their configured intervals.
  *
- * Tracks an internal connection count: env sampling continues until the last
+ * Tracks an internal connection count: sampling continues until the last
  * client disconnects.
  *
  * @return 0 on success, negative errno on failure.
@@ -146,8 +145,8 @@ int sensor_manager_on_connected(void);
 /**
  * @brief Notify the sensor manager that a GATT client has disconnected.
  *
- * Decrements the connection count; cancels the env work item when the last
- * client is gone. The CCS811 (air quality) work item is unaffected.
+ * Decrements the connection count; cancels periodic work when the last client
+ * is gone (only when CONFIG_SENSOR_PERIODIC_SAMPLING is enabled).
  */
 void sensor_manager_on_disconnected(void);
 

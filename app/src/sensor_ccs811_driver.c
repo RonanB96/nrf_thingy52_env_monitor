@@ -107,7 +107,7 @@ int ccs811_driver_init(const struct device *ccs811_device)
 	ccs811_dev = ccs811_device;
 	ccs811_enabled = true;
 	ccs811_conditioning_complete = false;
-	ccs811_init_time = k_uptime_get();
+	ccs811_init_time = 0;
 
 	/* Reset adaptive sampling state */
 	first_sample_obtained = false;
@@ -118,14 +118,15 @@ int ccs811_driver_init(const struct device *ccs811_device)
 
 	k_mutex_unlock(&ccs811_mutex);
 
-	LOG_INF("CCS811 driver initialized - starting conditioning period");
+	LOG_INF("CCS811 driver initialized - conditioning starts on first connected read");
 
-	/* Start in 1-second mode for initial quick sampling */
-	int mode_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
+	/* Stay in IDLE until a GATT client triggers a read (connection-driven). */
+	int mode_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
 	if (mode_ret != 0) {
-		LOG_WRN("Failed to set initial 1-second mode: %d", mode_ret);
+		LOG_WRN("Failed to set initial IDLE mode: %d", mode_ret);
 	} else {
-		LOG_INF("CCS811 started in 1-second mode for initial sampling");
+		ccs811_in_idle_mode = true;
+		LOG_INF("CCS811 held in IDLE mode until connected sampling begins");
 	}
 
 	int baseline = ccs811_baseline_fetch(ccs811_dev);
@@ -146,6 +147,22 @@ int ccs811_driver_init(const struct device *ccs811_device)
 	return 0;
 }
 
+void ccs811_driver_begin_sampling_session(void)
+{
+	if (ccs811_dev == NULL) {
+		return;
+	}
+
+	if (ccs811_init_time != 0) {
+		return;
+	}
+
+	ccs811_init_time = k_uptime_get();
+	ccs811_conditioning_complete = false;
+	LOG_INF("CCS811 sampling session started — %u min conditioning begins",
+		CCS811_CONDITIONING_TIME_MS / (60U * 1000U));
+}
+
 bool ccs811_driver_is_ready(void)
 {
 	if (ccs811_conditioning_complete) {
@@ -153,7 +170,7 @@ bool ccs811_driver_is_ready(void)
 	}
 
 	if (ccs811_init_time == 0) {
-		/* Not initialized yet */
+		/* No connected sampling session yet */
 		return false;
 	}
 
