@@ -3,6 +3,8 @@
 #
 # Usage: ./scripts/verify_hardware.sh [build_dir]
 #
+# Serial port is cached in .hardware/session (see scripts/resolve_serial_port.sh).
+# Override with SERIAL_PORT=... or scripts/resolve_serial_port.sh --refresh.
 # Exit 0: JLink detected, serial port accessible, firmware flashed, expected
 #         boot log lines received.
 # Exit 1: any check fails.
@@ -13,9 +15,12 @@
 # serial port, another owns the flash tool.
 
 BUILD_DIR="${1:-app/build}"
-# Can change
-SERIAL_PORT="/dev/ttyUSB1"
 BAUD=115200
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! SERIAL_PORT="$("$SCRIPT_DIR/resolve_serial_port.sh")"; then
+    exit 1
+fi
 LOG_FILE="$(mktemp /tmp/thingy52_boot_XXXXXX.log)"
 BOOT_SETTLE_SECONDS=5
 
@@ -24,6 +29,25 @@ REQUIRED_PATTERNS=(
     "sensor_manager: Sensor manager initialized"
     "ble_advertiser: Legacy advertising started successfully"
 )
+BOOT_STARTED_ALTERNATES=(
+    "Booting BLE Env Monitor"
+)
+
+pattern_found() {
+    local pattern="$1"
+    if grep -qF "$pattern" "$LOG_FILE"; then
+        return 0
+    fi
+    if [[ "$pattern" == "Starting BLE Environmental Monitor" ]]; then
+        local alt
+        for alt in "${BOOT_STARTED_ALTERNATES[@]}"; do
+            if grep -qF "$alt" "$LOG_FILE"; then
+                return 0
+            fi
+        done
+    fi
+    return 1
+}
 
 cleanup() {
     if [[ -n "$LOGGER_PID" ]]; then
@@ -66,11 +90,11 @@ echo "  OK: $SERIAL_PORT accessible"
 # 3. Start persistent logger BEFORE flash so post-reset boot output is
 #    captured from the first byte.  The logger stays open until we kill it.
 echo "[3/4] Starting serial logger then flashing..."
-python3 scripts/serial_logger.py "$SERIAL_PORT" "$BAUD" "$LOG_FILE" &
+python3 scripts/serial_logger.py "$SERIAL_PORT" "$BAUD" "$LOG_FILE" > /dev/null &
 LOGGER_PID=$!
 
 sleep 0.5  # give the logger time to open the port before flash triggers reset
-if ! west flash -d "${BUILD_DIR}/app" --runner jlink > /tmp/west_flash.log 2>&1; then
+if ! west flash -d "$BUILD_DIR" --runner jlink > /tmp/west_flash.log 2>&1; then
     echo "FAIL: west flash exited non-zero"
     cat /tmp/west_flash.log
     exit 1
@@ -87,7 +111,7 @@ LOGGER_PID=""
 echo "[4/4] Verifying boot log..."
 FAIL=0
 for pattern in "${REQUIRED_PATTERNS[@]}"; do
-    if grep -qF "$pattern" "$LOG_FILE"; then
+    if pattern_found "$pattern"; then
         echo "  OK: '$pattern'"
     else
         echo "  FAIL: missing '$pattern'"

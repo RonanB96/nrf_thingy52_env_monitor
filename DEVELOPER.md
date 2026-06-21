@@ -374,14 +374,20 @@ hardware without human involvement.
 |------|-------|
 | Board | thingy52/nrf52832 |
 | Debugger | J-Link Ultra (S/N 505103055) |
-| Serial port | `/dev/ttyUSB[X]` at 115200 baud |
-| Hardware map | `hardware.map` (Twister format) |
+| Serial port | FTDI TTL232R on Thingy P0.02/P0.03 — cached in `.hardware/session` |
+| Hardware map | `hardware.map` (J-Link / board only; no UART path) |
+
+`/dev/ttyUSB*` numbers change when cables are replugged. Run
+`scripts/resolve_serial_port.sh` once per session; it discovers the port and
+writes `SERIAL_PORT` to `.hardware/session`. Re-run with `--refresh` after
+replugging the UART cable.
 
 Confirm the hardware is reachable:
 
 ```bash
 nrfutil device list
-ls -la /dev/ttyUSB[X]
+eval "$(scripts/resolve_serial_port.sh --export)"
+ls -la "$SERIAL_PORT"
 ```
 
 ### Flash firmware
@@ -402,7 +408,8 @@ output.  Use `scripts/serial_logger.py` — it stays open until explicitly kille
 
 **Terminal 1 — logger (start first):**
 ```bash
-python3 scripts/serial_logger.py /dev/ttyUSB[X] 115200 boot.log
+eval "$(scripts/resolve_serial_port.sh --export)"
+python3 scripts/serial_logger.py "$SERIAL_PORT" 115200 boot.log
 ```
 
 **Terminal 2 — flash:**
@@ -430,12 +437,12 @@ Expected output:
 === Thingy:52 Hardware Verification ===
 [1/4] Checking JLink...
   OK: JLink detected
-[2/4] Checking serial port /dev/ttyUSB1...
-  OK: /dev/ttyUSB1 accessible
+[2/4] Checking serial port /dev/ttyUSB0...
+  OK: /dev/ttyUSB0 accessible
 [3/4] Starting serial logger then flashing...
   OK: west flash succeeded
 [4/4] Verifying boot log...
-  OK: 'Booting BLE Env Monitor'
+  OK: 'Starting BLE Environmental Monitor'
   OK: 'sensor_manager: Sensor manager initialized'
   OK: 'ble_advertiser: Legacy advertising started successfully'
 
@@ -444,32 +451,34 @@ Expected output:
 
 ### Twister hardware testing
 
-The `hardware.map` file at the repository root describes the attached device
-in [Twister hardware-map format](https://docs.zephyrproject.org/latest/develop/test/twister.html#hardware-testing):
+The `hardware.map` file at the repository root describes the attached J-Link in
+[Twister hardware-map format](https://docs.zephyrproject.org/latest/develop/test/twister.html#hardware-testing).
+The UART port is not stored there; resolve it at runtime:
 
 ```yaml
 - connected: true
   id: '505103055'
   platform: thingy52/nrf52832
   runner: jlink
-  serial: /dev/ttyUSB[X]
-  baud: 115200
 ```
 
 To run hardware tests via Twister:
 
 ```bash
 source .venv/bin/activate && source env.sh
+eval "$(scripts/resolve_serial_port.sh --export)"
 ./modules/zephyr/scripts/twister \
   -T app/tests/hardware \
   --hardware-map hardware.map \
   --device-testing \
+  --device-serial "$SERIAL_PORT" \
+  --device-serial-baud 115200 \
   --inline-logs
 ```
 
 ### Permissions
 
-The current user must be in the `dialout` group to access `/dev/ttyUSB[X]`:
+The current user must be in the `dialout` group to access the UART device node:
 
 ```bash
 sudo usermod -aG dialout $USER   # then log out and back in
