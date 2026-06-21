@@ -88,11 +88,16 @@ ZTEST(battery_service, test_init_valid_battery)
 	int ret = ble_battery_service_init();
 
 	zassert_equal(ret, 0, "Init must succeed");
-	zassert_equal(ble_battery_service_get_level(), 80, "Level must be 80 after init");
+
+	int bas_count_before = bt_bas_set_battery_level_fake.call_count;
+
+	ret = ble_battery_service_on_connected();
+	zassert_equal(ret, 0, "Connect handler must succeed");
+	zassert_equal(ble_battery_service_get_level(), 80, "Level must be 80 after connect");
 	zassert_false(ble_battery_service_is_charging(), "Must not be charging");
 	zassert_equal(bt_bas_set_battery_level_fake.arg0_val, 80, "BAS must receive level 80");
-	zassert_true(bt_bas_set_battery_level_fake.call_count > 0,
-		     "bt_bas_set_battery_level must have been called");
+	zassert_equal(bt_bas_set_battery_level_fake.call_count, bas_count_before + 1,
+		      "bt_bas_set_battery_level must be called once on connect");
 }
 
 ZTEST(battery_service, test_init_deferred_when_hardware_not_ready)
@@ -266,22 +271,17 @@ ZTEST(battery_service, test_update_manual_propagates_bas_write_error)
 	bt_bas_set_battery_level_fake.return_val = 0;
 }
 
-/* ---- BAS retry loop on init when bt_bas_set_battery_level fails ---- */
+/* ---- init does not push BAS level until GATT connect ---- */
 
-ZTEST(battery_service, test_init_bas_set_failure_retries_then_continues)
+ZTEST(battery_service, test_init_does_not_write_bas_level)
 {
 	battery_service_get_level_fake.return_val = 60;
-	bt_bas_set_battery_level_fake.return_val = -EIO; /* always fail to exhaust retries */
 
 	int ret = ble_battery_service_init();
 
-	zassert_equal(ret, 0, "Init must succeed in degraded mode even on BAS failure, got %d",
-		      ret);
-	zassert_equal(bt_bas_set_battery_level_fake.call_count, 3,
-		      "Init must retry bt_bas_set_battery_level up to 3 times, got %u",
-		      bt_bas_set_battery_level_fake.call_count);
-
-	bt_bas_set_battery_level_fake.return_val = 0;
+	zassert_equal(ret, 0, "Init must succeed, got %d", ret);
+	zassert_equal(bt_bas_set_battery_level_fake.call_count, 0,
+		      "Init must not call bt_bas_set_battery_level before connect");
 }
 
 /* ---- charging-status callback path ---- */
@@ -290,6 +290,7 @@ ZTEST(battery_service, test_charging_callback_updates_state_and_bas)
 {
 	battery_service_get_level_fake.return_val = 50;
 	ble_battery_service_init();
+	ble_battery_service_on_connected();
 
 	battery_charging_cb_t cb = battery_service_register_charging_callback_fake.arg0_val;
 

@@ -22,8 +22,6 @@ LOG_MODULE_REGISTER(ble_battery_service, CONFIG_LOG_DEFAULT_LEVEL);
 static const uint8_t BATTERY_GOOD_THRESHOLD = 75U;
 static const uint8_t BATTERY_LOW_THRESHOLD = 25U;
 static const uint8_t BATTERY_CRITICAL_THRESHOLD = 10U;
-static const uint8_t BLE_BAS_INIT_RETRY_MAX = 3U;
-static const uint32_t BLE_BAS_RETRY_DELAY_MS = 50U;
 static const uint32_t BLE_STACK_READY_DELAY_MS = 100U;
 static const uint8_t BATTERY_LEVEL_MAX = 100U;
 static struct k_work_delayable battery_poll_work;

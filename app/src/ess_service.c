@@ -128,7 +128,13 @@ struct ess_sensor {
 #define ESS_TVOC_UNCERTAINTY  0x32U /* 50 ppb */
 
 #define ESS_PRESS_MIN_KPA 26.0f
+#define ESS_TEMP_MIN_C    ((float)ESS_TEMP_MIN_E_2C / 100.0f)
+#define ESS_TEMP_MAX_C    ((float)ESS_TEMP_MAX_E_2C / 100.0f)
+#define ESS_HUM_MIN_PCT   0.0f
+#define ESS_HUM_MAX_PCT   ((float)ESS_HUM_MAX_E_2PCT / 100.0f)
 #define ESS_PRESS_MAX_KPA 126.0f
+
+static const float ess_log_press_kpa_to_hpa = 10.0f;
 
 static struct ess_sensor temperature_sensor = {
 	.value = ESS_UNKNOWN_S16,
@@ -261,12 +267,14 @@ static ssize_t ess_att_error_from_errno(int err)
 
 static bool ess_temperature_in_range(float temp_celsius)
 {
-	return isfinite(temp_celsius) && temp_celsius >= -273.15f && temp_celsius <= 327.67f;
+	return isfinite(temp_celsius) && temp_celsius >= ESS_TEMP_MIN_C &&
+	       temp_celsius <= ESS_TEMP_MAX_C;
 }
 
 static bool ess_humidity_in_range(float humidity_percent)
 {
-	return isfinite(humidity_percent) && humidity_percent >= 0.0f && humidity_percent <= 100.0f;
+	return isfinite(humidity_percent) && humidity_percent >= ESS_HUM_MIN_PCT &&
+	       humidity_percent <= ESS_HUM_MAX_PCT;
 }
 
 static bool ess_pressure_in_range(float pressure_kpa)
@@ -805,12 +813,13 @@ int ess_service_update(const struct sensor_data *data)
 		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), CO2=%dppm, "
 			"TVOC=%dppb",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
-			(double)(data->pressure * 10.0f), data->eco2, data->tvoc);
+			(double)(data->pressure * ess_log_press_kpa_to_hpa), data->eco2,
+			data->tvoc);
 	} else if (sensor_manager_is_ccs811_ready()) {
 		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), "
 			"CO2/TVOC=sensor_error",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
-			(double)(data->pressure * 10.0f));
+			(double)(data->pressure * ess_log_press_kpa_to_hpa));
 	} else {
 		int64_t elapsed = k_uptime_get();
 		int64_t remaining_sec = (CCS811_CONDITIONING_MS - elapsed) / ESS_MS_PER_SEC;
@@ -818,13 +827,15 @@ int ess_service_update(const struct sensor_data *data)
 			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), "
 				"CO2/TVOC=conditioning(%ds)",
 				(double)data->temperature, (double)data->humidity,
-				(double)data->pressure, (double)(data->pressure * 10.0f),
+				(double)data->pressure,
+				(double)(data->pressure * ess_log_press_kpa_to_hpa),
 				(int)remaining_sec);
 		} else {
 			LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), "
 				"CO2/TVOC=conditioning(finishing)",
 				(double)data->temperature, (double)data->humidity,
-				(double)data->pressure, (double)(data->pressure * 10.0f));
+				(double)data->pressure,
+				(double)(data->pressure * ess_log_press_kpa_to_hpa));
 		}
 	}
 

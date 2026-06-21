@@ -45,11 +45,14 @@ enum ad_data_index {
 static bool advertising_enabled = false;
 
 /* Timing and retry constants */
-#define BLE_DEVICE_ID_LEN        8U     /* hwinfo device ID buffer size */
-#define BLE_DEVICE_ID_BYTES_USED 4U     /* Bytes of HW ID used for unique name */
-#define BLE_DEVICE_NAME_LEN      32U    /* Max device name buffer size */
-#define BLE_BITS_PER_BYTE        8U     /* Bits in one byte (== CHAR_BIT) for packing loops */
-static const int BLE_ADV_RETRY_MAX = 5; /* Max advertising start retries */
+#define BLE_DEVICE_ID_LEN          8U    /* hwinfo device ID buffer size */
+#define BLE_DEVICE_ID_BYTES_USED   4U    /* Bytes of HW ID used for unique name */
+#define BLE_DEVICE_NAME_LEN        32U   /* Max device name buffer size */
+#define BLE_BITS_PER_BYTE          8U    /* Bits in one byte (== CHAR_BIT) for packing loops */
+#define BLE_ADDR_LEN               6U    /* Bluetooth LE address length in bytes */
+#define BLE_ADDR_MSB_IDX           5U    /* MSB index in bt_addr_le_t::a::val[] */
+#define BLE_STATIC_RANDOM_MSB_MASK 0xC0U /* Static random addr: top two bits set */
+static const int BLE_ADV_RETRY_MAX = 5;  /* Max advertising start retries */
 static const uint32_t BLE_CONTROLLER_INIT_DELAY_MS = 500U; /* Controller init settle time */
 static const uint32_t BLE_ADV_STOP_DELAY_MS = 100U;   /* Delay after stopping adv before restart */
 static const uint32_t BLE_ADV_BACKOFF_BASE_MS = 200U; /* Initial backoff for EAGAIN retry */
@@ -217,16 +220,16 @@ static int configure_static_ble_identity(void)
 		return 0;
 	}
 
-	size_t bytes_to_use = MIN((size_t)id_len, 6U);
+	size_t bytes_to_use = MIN((size_t)id_len, BLE_ADDR_LEN);
 
 	memcpy(static_addr.a.val, &device_id[0], bytes_to_use);
-	if (bytes_to_use < 6U) {
-		memset(&static_addr.a.val[bytes_to_use], 0, 6U - bytes_to_use);
+	if (bytes_to_use < BLE_ADDR_LEN) {
+		memset(&static_addr.a.val[bytes_to_use], 0, BLE_ADDR_LEN - bytes_to_use);
 	}
 
 	static_addr.type = BT_ADDR_LE_RANDOM;
 	/* Static random addresses require bits [7:6] = 11b in the MSB. */
-	static_addr.a.val[5] |= 0xC0;
+	static_addr.a.val[BLE_ADDR_MSB_IDX] |= BLE_STATIC_RANDOM_MSB_MASK;
 
 	ret = bt_id_create(&static_addr, NULL);
 	if (ret < 0) {

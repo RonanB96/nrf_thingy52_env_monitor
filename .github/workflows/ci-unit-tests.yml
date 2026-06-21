@@ -71,17 +71,16 @@ jobs:
                   west config build.cmake-args "" || true
                   west update --fetch smart --narrow --fetch-opt=--depth=1
 
-            - name: Build native_sim tests
+            - name: Run unit tests (Twister)
               run: |
                   source modules/zephyr/zephyr-env.sh
                   export ZEPHYR_TOOLCHAIN_VARIANT=host
-                  west build app/tests -d app/tests/build -b native_sim -p always
-
-            - name: Run tests
-              run: |
-                  ./app/tests/build/tests/zephyr/zephyr.exe > test_output.log 2>&1
-                  cat test_output.log
-                  grep -q "PROJECT EXECUTION SUCCESSFUL" test_output.log
+                  rm -rf twister-out
+                  ./modules/zephyr/scripts/twister \
+                    -T app/tests/unit \
+                    -T app/tests/integration \
+                    -p native_sim \
+                    --inline-logs
 
             - name: Upload test outputs
               if: always() && !env.ACT
@@ -89,5 +88,5 @@ jobs:
               with:
                   name: unit-test-results
                   path: |
-                      app/tests/build/tests/zephyr/zephyr.elf
-                      test_output.log
+                      twister-out/twister.json
+                      twister-out/twister_report.xml
