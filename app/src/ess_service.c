@@ -121,11 +121,11 @@ struct ess_sensor {
 
 /* Measurement uncertainty values (used in static initializers, must be #define or enum -- not
  * static const -- for file-scope struct initialization in C). */
-#define ESS_TEMP_UNCERTAINTY      0x32U  /* 50 x 0.01°C = ±0.50°C */
-#define ESS_HUM_UNCERTAINTY       0x32U  /* 50 x 0.01% = ±0.50%RH */
-#define ESS_PRESS_UNCERTAINTY     0x96U  /* 150 x 0.1 Pa = ±15.0 Pa */
-#define ESS_CO2_UNCERTAINTY       0x64U  /* 100 ppm */
-#define ESS_TVOC_UNCERTAINTY      0x32U  /* 50 ppb */
+#define ESS_TEMP_UNCERTAINTY  0x32U /* 50 x 0.01°C = ±0.50°C */
+#define ESS_HUM_UNCERTAINTY   0x32U /* 50 x 0.01% = ±0.50%RH */
+#define ESS_PRESS_UNCERTAINTY 0x96U /* 150 x 0.1 Pa = ±15.0 Pa */
+#define ESS_CO2_UNCERTAINTY   0x64U /* 100 ppm */
+#define ESS_TVOC_UNCERTAINTY  0x32U /* 50 ppb */
 
 #define ESS_PRESS_MIN_KPA 26.0f
 #define ESS_PRESS_MAX_KPA 126.0f
@@ -301,26 +301,30 @@ static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 		ret = sensor_manager_update_selective(SENSOR_TEMP_HUMIDITY);
 		if (ret != 0) {
 			LOG_WRN("Failed to trigger temp/humidity update: %d", ret);
-			invalidate_sensor(reading_temperature ? &temperature_sensor : &humidity_sensor);
+			invalidate_sensor(reading_temperature ? &temperature_sensor
+							      : &humidity_sensor);
 			return ess_att_error_from_errno(ret);
 		}
 
 		ret = sensor_manager_get_data(&fresh_data);
 		if (ret != 0) {
 			LOG_WRN("Failed to fetch temp/humidity data: %d", ret);
-			invalidate_sensor(reading_temperature ? &temperature_sensor : &humidity_sensor);
+			invalidate_sensor(reading_temperature ? &temperature_sensor
+							      : &humidity_sensor);
 			return ess_att_error_from_errno(ret);
 		}
 
 		if (SENSOR_DATA_IS_VALID(&fresh_data, SENSOR_TEMPERATURE)) {
 			if (!ess_temperature_in_range(fresh_data.temperature)) {
-				LOG_ERR("Temperature %.2f out of range", (double)fresh_data.temperature);
+				LOG_ERR("Temperature %.2f out of range",
+					(double)fresh_data.temperature);
 				invalidate_sensor(&temperature_sensor);
 				if (reading_temperature) {
 					return ess_att_error_from_errno(-ERANGE);
 				}
 			} else {
-				temperature_sensor.value = (int32_t)ess_encode_temperature(fresh_data.temperature);
+				temperature_sensor.value =
+					(int32_t)ess_encode_temperature(fresh_data.temperature);
 				temperature_sensor.value_known = true;
 			}
 		} else {
@@ -338,7 +342,8 @@ static ssize_t read_u16(struct bt_conn *conn, const struct bt_gatt_attr *attr, v
 					return ess_att_error_from_errno(-ERANGE);
 				}
 			} else {
-				humidity_sensor.value = (int32_t)ess_encode_humidity(fresh_data.humidity);
+				humidity_sensor.value =
+					(int32_t)ess_encode_humidity(fresh_data.humidity);
 				humidity_sensor.value_known = true;
 			}
 		} else {
@@ -797,11 +802,13 @@ int ess_service_update(const struct sensor_data *data)
 
 	/* Log current values - show conditioning status for gas sensors */
 	if ((data->valid_mask & SENSOR_AIR_QUALITY) != 0) {
-		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), CO2=%dppm, TVOC=%dppb",
+		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), CO2=%dppm, "
+			"TVOC=%dppb",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
 			(double)(data->pressure * 10.0f), data->eco2, data->tvoc);
 	} else if (sensor_manager_is_ccs811_ready()) {
-		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), CO2/TVOC=sensor_error",
+		LOG_INF("ESS updated: T=%.2f°C, H=%.1f%%, P=%.3fkPa(%.2fhPa), "
+			"CO2/TVOC=sensor_error",
 			(double)data->temperature, (double)data->humidity, (double)data->pressure,
 			(double)(data->pressure * 10.0f));
 	} else {

@@ -11,8 +11,8 @@
 #include <math.h>
 #include "ess_encode.h"
 
-#define ESS_TEMP_SCALE       100.0f  /* \u00b0C  -> 0.01 \u00b0C */
-#define ESS_HUM_SCALE        100.0f  /* %    -> 0.01 % */
+#define ESS_TEMP_SCALE       100.0f   /* \u00b0C  -> 0.01 \u00b0C */
+#define ESS_HUM_SCALE        100.0f   /* %    -> 0.01 % */
 #define ESS_PRESS_KPA_TO_DPA 10000.0f /* kPa -> 0.1 Pa */
 
 int16_t ess_encode_temperature(float temp_celsius)

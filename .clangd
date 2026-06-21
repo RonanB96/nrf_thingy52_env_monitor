@@ -1,0 +1,7 @@
+# Use the west firmware build compilation database for IntelliSense and diagnostics.
+# Regenerate with: west build app -d app/build
+CompileFlags:
+  CompilationDatabase: app/build/app
+  Add:
+    - -Wno-unknown-warning-option
+    - -Wno-unused-command-line-argument

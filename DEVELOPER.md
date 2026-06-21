@@ -38,12 +38,11 @@ sudo apt install --no-install-recommends git cmake ninja-build gperf \
   xz-utils file make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
 ```
 
-- `clang-format` and `clang-tidy` for linting. The repository `.clang-format` is a symlink to
-  `modules/zephyr/.clang-format`, so local formatting always tracks Zephyr upstream style.
+- `clang-format-18` and `clang-tidy` for linting (install via apt; same tool as CI).
+  The repository `.clang-format` tracks Zephyr upstream style.
 
 ```bash
-sudo apt install clang-format-14 clang-tidy
-sudo ln -sf /usr/bin/clang-format-14 /usr/local/bin/clang-format
+sudo apt install clang-format-18 clang-tidy
 ```
 
 ### Python Virtual Environment
@@ -139,20 +138,29 @@ A [`.clang-format`](.clang-format) file at the repository root enforces the abov
 ### Formatting a File
 
 ```bash
-clang-format -i app/src/<file>.c
+clang-format-18 -i app/src/<file>.c
 ```
 
 ### Formatting All Source Files (including tests)
 
 ```bash
-find app/src app/include app/tests/src -name '*.c' -o -name '*.h' | xargs clang-format -i
+find app/src app/include app/tests/src -name '*.c' -o -name '*.h' \
+  | xargs clang-format-18 -i
 ```
 
 ### Checking Without Modifying
 
+Same check as CI:
+
+```bash
+scripts/check_clang_format.sh
+```
+
+Or manually:
+
 ```bash
 find app/src app/include app/tests/src -name '*.c' -o -name '*.h' \
-  | xargs clang-format --dry-run --Werror
+  | xargs clang-format-18 --dry-run --Werror
 ```
 
 A non-zero exit code means at least one file needs formatting. Fix with the commands above.
@@ -497,7 +505,7 @@ The CI pipeline uses three workflows running in the Zephyr public CI container
 
 `ci-static-analysis.yml` runs static checks only:
 
-1. `format-and-lint` (`clang-format`, `checkpatch`, `yamllint`, `actionlint`)
+1. `format-and-lint` (`clang-format-18`, `checkpatch`, `yamllint`, `actionlint`)
 2. `codechecker` (static analysis)
 
 `ci-build.yml` runs the standard firmware build.
