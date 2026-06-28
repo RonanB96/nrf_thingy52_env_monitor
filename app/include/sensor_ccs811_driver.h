@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Initialize CCS811 driver and start conditioning period
+ * @brief Initialize CCS811 driver and start boot conditioning (10 s for 20 min).
  *
  * @param ccs811_dev CCS811 device from device tree
  * @return 0 on success, negative error code on failure
@@ -33,12 +33,14 @@ extern "C" {
 int ccs811_driver_init(const struct device *ccs811_dev);
 
 /**
- * @brief Begin a connected sampling session (starts conditioning timer).
- *
- * Call when the first GATT client connects. Idempotent until disconnect and
- * a full driver re-init.
+ * @brief Notify driver that a GATT client connected (1 s mode after conditioning).
  */
-void ccs811_driver_begin_sampling_session(void);
+void ccs811_driver_on_connected(void);
+
+/**
+ * @brief Notify driver that the last GATT client disconnected (IDLE mode).
+ */
+void ccs811_driver_on_disconnected(void);
 
 /**
  * @brief Check if CCS811 conditioning period is complete

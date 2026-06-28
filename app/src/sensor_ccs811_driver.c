@@ -50,6 +50,68 @@ static int64_t last_sample_time;
 
 /* Power management: track whether sensor is in IDLE mode between reads */
 static bool ccs811_in_idle_mode;
+static bool ccs811_ble_connected;
+
+static struct k_work_delayable conditioning_work;
+
+/* Thread safety mutex for CCS811 operations */
+static K_MUTEX_DEFINE(ccs811_mutex);
+
+static void ccs811_start_boot_conditioning(void)
+{
+	ccs811_init_time = k_uptime_get();
+	ccs811_conditioning_complete = false;
+
+	int ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_10SEC);
+	if (ret == 0) {
+		ccs811_in_idle_mode = false;
+		LOG_INF("CCS811 boot conditioning: 10 s mode for %u min",
+			CCS811_CONDITIONING_TIME_MS / (60U * 1000U));
+	} else {
+		LOG_WRN("Failed to start CCS811 10 s boot conditioning: %d", ret);
+	}
+
+	(void)k_work_schedule(&conditioning_work, K_MSEC(CCS811_CONDITIONING_TIME_MS));
+}
+
+static void ccs811_conditioning_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	int ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+	if (ret != 0) {
+		LOG_WRN("CCS811 conditioning work: mutex failed: %d", ret);
+		return;
+	}
+
+	if (ccs811_conditioning_complete) {
+		k_mutex_unlock(&ccs811_mutex);
+		return;
+	}
+
+	ccs811_conditioning_complete = true;
+	LOG_INF("CCS811 boot conditioning complete");
+
+	if (ccs811_ble_connected) {
+		ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
+		if (ret == 0) {
+			ccs811_in_idle_mode = false;
+			LOG_INF("CCS811 connected: 1 s mode");
+		}
+	} else {
+		ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
+		if (ret == 0) {
+			ccs811_in_idle_mode = true;
+			LOG_INF("CCS811 idle until BLE connect");
+		}
+	}
+
+	if (ret != 0) {
+		LOG_WRN("CCS811 post-conditioning mode change failed: %d", ret);
+	}
+
+	k_mutex_unlock(&ccs811_mutex);
+}
 
 /* Baseline management for long-term accuracy */
 static uint16_t stored_baseline;
@@ -74,9 +136,6 @@ static int ccs811_settings_set(const char *key, size_t len, settings_read_cb rea
 }
 
 SETTINGS_STATIC_HANDLER_DEFINE(ccs811, "ccs811", NULL, ccs811_settings_set, NULL, NULL);
-
-/* Thread safety mutex for CCS811 operations */
-static K_MUTEX_DEFINE(ccs811_mutex);
 
 int ccs811_driver_init(const struct device *ccs811_device)
 {
@@ -112,22 +171,16 @@ int ccs811_driver_init(const struct device *ccs811_device)
 	/* Reset adaptive sampling state */
 	first_sample_obtained = false;
 	ccs811_in_idle_mode = false;
+	ccs811_ble_connected = false;
 	cached_co2_ppm = 0;
 	cached_tvoc_ppb = 0;
 	last_sample_time = 0;
 
 	k_mutex_unlock(&ccs811_mutex);
 
-	LOG_INF("CCS811 driver initialized - conditioning starts on first connected read");
+	k_work_init_delayable(&conditioning_work, ccs811_conditioning_work_handler);
 
-	/* Stay in IDLE until a GATT client triggers a read (connection-driven). */
-	int mode_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
-	if (mode_ret != 0) {
-		LOG_WRN("Failed to set initial IDLE mode: %d", mode_ret);
-	} else {
-		ccs811_in_idle_mode = true;
-		LOG_INF("CCS811 held in IDLE mode until connected sampling begins");
-	}
+	LOG_INF("CCS811 driver initialized");
 
 	int baseline = ccs811_baseline_fetch(ccs811_dev);
 	if (baseline > 0) {
@@ -138,29 +191,73 @@ int ccs811_driver_init(const struct device *ccs811_device)
 
 	/* Restore saved baseline if available for improved accuracy */
 	if (stored_baseline != 0) {
-		mode_ret = ccs811_driver_restore_baseline();
+		int mode_ret = ccs811_driver_restore_baseline();
 		if (mode_ret != 0) {
 			LOG_WRN("Failed to restore baseline: %d", mode_ret);
 		}
 	}
 
+	ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+	if (ret == 0) {
+		ccs811_start_boot_conditioning();
+		k_mutex_unlock(&ccs811_mutex);
+	} else {
+		LOG_WRN("Failed to acquire CCS811 mutex for boot conditioning: %d", ret);
+	}
+
 	return 0;
 }
 
-void ccs811_driver_begin_sampling_session(void)
+void ccs811_driver_on_connected(void)
 {
 	if (ccs811_dev == NULL) {
 		return;
 	}
 
-	if (ccs811_init_time != 0) {
+	int ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+	if (ret != 0) {
+		LOG_WRN("Failed to acquire CCS811 mutex on connect: %d", ret);
 		return;
 	}
 
-	ccs811_init_time = k_uptime_get();
-	ccs811_conditioning_complete = false;
-	LOG_INF("CCS811 sampling session started — %u min conditioning begins",
-		CCS811_CONDITIONING_TIME_MS / (60U * 1000U));
+	ccs811_ble_connected = true;
+
+	if (ccs811_conditioning_complete) {
+		ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
+		if (ret == 0) {
+			ccs811_in_idle_mode = false;
+			LOG_INF("CCS811 BLE connected: 1 s mode");
+		} else {
+			LOG_WRN("CCS811 failed to enter 1 s mode on connect: %d", ret);
+		}
+	}
+
+	k_mutex_unlock(&ccs811_mutex);
+}
+
+void ccs811_driver_on_disconnected(void)
+{
+	if (ccs811_dev == NULL) {
+		return;
+	}
+
+	int ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+	if (ret != 0) {
+		LOG_WRN("Failed to acquire CCS811 mutex on disconnect: %d", ret);
+		return;
+	}
+
+	ccs811_ble_connected = false;
+
+	ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
+	if (ret == 0) {
+		ccs811_in_idle_mode = true;
+		LOG_INF("CCS811 BLE disconnected: IDLE mode");
+	} else {
+		LOG_WRN("CCS811 failed to enter IDLE on disconnect: %d", ret);
+	}
+
+	k_mutex_unlock(&ccs811_mutex);
 }
 
 bool ccs811_driver_is_ready(void)
@@ -170,7 +267,7 @@ bool ccs811_driver_is_ready(void)
 	}
 
 	if (ccs811_init_time == 0) {
-		/* No connected sampling session yet */
+		/* Boot conditioning not started */
 		return false;
 	}
 
@@ -308,7 +405,6 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 	struct sensor_value tvoc_val;
 	int ret = 0;
 	bool mutex_locked = false;
-	bool woke_sensor = false;
 
 	/* Input validation */
 	if (!ccs811_dev) {
@@ -345,25 +441,11 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 		goto exit;
 	}
 
-	/* Wake sensor from idle if in power-save mode */
-	if (ccs811_in_idle_mode) {
-		LOG_INF("CCS811 waking from IDLE for on-demand measurement");
-		int wake_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
-		if (wake_ret == 0) {
-			woke_sensor = true;
-			/* Wait 1.5s for the first 1-second measurement to complete */
-			k_mutex_unlock(&ccs811_mutex);
-			k_msleep((int32_t)CCS811_IDLE_WAKE_DELAY_MS);
-			ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
-			if (ret != 0) {
-				LOG_ERR("Failed to re-acquire CCS811 mutex after wake: %d", ret);
-				woke_sensor = false;
-				mutex_locked = false;
-				goto exit;
-			}
-		} else {
-			LOG_WRN("CCS811 wake from IDLE failed: %d", wake_ret);
-		}
+	/* Connected clients run 1 s mode; disconnected post-conditioning stays IDLE. */
+	if (ccs811_in_idle_mode && !ccs811_ble_connected) {
+		LOG_DBG("CCS811 idle (no BLE client)");
+		ret = -EAGAIN;
+		goto exit;
 	}
 
 	/* Update environmental data if provided and valid */
@@ -469,17 +551,8 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 	/* Update timing and adaptive sampling logic */
 	last_sample_time = k_uptime_get();
 
-	/* After first conditioning read: enter IDLE power-save mode between reads */
 	if (!first_sample_obtained) {
 		first_sample_obtained = true;
-		int idle_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
-		if (idle_ret == 0) {
-			ccs811_in_idle_mode = true;
-			woke_sensor = false; /* Already returning to idle below */
-			LOG_INF("CCS811 entered IDLE mode after first read (power save)");
-		} else {
-			LOG_WRN("CCS811 failed to enter IDLE mode: %d", idle_ret);
-		}
 	}
 
 	/* Check if baseline save is due */
@@ -491,13 +564,6 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 	ret = 0;
 
 exit:
-	/* Return sensor to IDLE if we woke it for this read */
-	if (mutex_locked && woke_sensor) {
-		ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
-		ccs811_in_idle_mode = true;
-		LOG_INF("CCS811 returned to IDLE mode");
-	}
-
 	/* Single exit point - release mutex if we acquired it */
 	if (mutex_locked) {
 		k_mutex_unlock(&ccs811_mutex);

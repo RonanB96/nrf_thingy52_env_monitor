@@ -23,7 +23,8 @@ DEFINE_FAKE_VALUE_FUNC(bool, lps22hb_driver_is_enabled);
 DEFINE_FAKE_VALUE_FUNC(int, lps22hb_driver_read_pressure, float *);
 
 DEFINE_FAKE_VALUE_FUNC(int, ccs811_driver_init, const struct device *);
-DEFINE_FAKE_VOID_FUNC(ccs811_driver_begin_sampling_session);
+DEFINE_FAKE_VOID_FUNC(ccs811_driver_on_connected);
+DEFINE_FAKE_VOID_FUNC(ccs811_driver_on_disconnected);
 DEFINE_FAKE_VALUE_FUNC(bool, ccs811_driver_is_ready);
 DEFINE_FAKE_VALUE_FUNC(int64_t, ccs811_driver_conditioning_time_remaining);
 DEFINE_FAKE_VALUE_FUNC(int, ccs811_driver_save_baseline);

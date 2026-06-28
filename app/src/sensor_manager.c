@@ -456,9 +456,7 @@ int sensor_manager_on_connected(void)
 	connected_count++;
 	LOG_INF("GATT client connected (count=%u): connect sample", (unsigned int)connected_count);
 
-	if (connected_count == 1U) {
-		ccs811_driver_begin_sampling_session();
-	}
+	ccs811_driver_on_connected();
 
 	/* Take a fresh env sample first so current_data.temperature and
 	 * .humidity are up to date. read_air_quality() pulls those values for
@@ -494,6 +492,7 @@ void sensor_manager_on_disconnected(void)
 		k_work_cancel_delayable(&env_work);
 		k_work_cancel_delayable(&aq_work);
 #endif
+		ccs811_driver_on_disconnected();
 		LOG_INF("No clients - connect-driven sampling idle");
 	}
 }

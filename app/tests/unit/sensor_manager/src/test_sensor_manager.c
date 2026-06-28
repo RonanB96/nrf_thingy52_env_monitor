@@ -488,8 +488,8 @@ ZTEST(sensor_manager, test_s03_on_connected_after_arm_does_env_then_aq_update)
 	battery_service_get_level_fake.call_count = 0;
 
 	zassert_equal(sensor_manager_on_connected(), 0);
-	zassert_equal(ccs811_driver_begin_sampling_session_fake.call_count, 1,
-		      "first connect must start CCS811 sampling session");
+	zassert_equal(ccs811_driver_on_connected_fake.call_count, 1,
+		      "connect must notify CCS811 driver");
 
 	/* MY contract per sensor_manager.c on_connected():
 	 *   update_selective(SENSOR_ENV_BASIC) -> hts221+lps22hb+battery x1
