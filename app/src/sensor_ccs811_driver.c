@@ -78,6 +78,22 @@ SETTINGS_STATIC_HANDLER_DEFINE(ccs811, "ccs811", NULL, ccs811_settings_set, NULL
 /* Thread safety mutex for CCS811 operations */
 static K_MUTEX_DEFINE(ccs811_mutex);
 
+static void ccs811_leave_conditioning_meas_mode(void)
+{
+	/* After the timer: 10s mode was started at connect; return to IDLE once ready. */
+	if (ccs811_dev == NULL || ccs811_in_idle_mode || !ccs811_conditioning_complete) {
+		return;
+	}
+
+	int idle_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
+	if (idle_ret == 0) {
+		ccs811_in_idle_mode = true;
+		LOG_INF("CCS811 left 10s conditioning mode, now IDLE");
+	} else {
+		LOG_WRN("CCS811 failed to leave conditioning mode: %d", idle_ret);
+	}
+}
+
 int ccs811_driver_init(const struct device *ccs811_device)
 {
 	if (!ccs811_device) {
@@ -157,8 +173,25 @@ void ccs811_driver_begin_sampling_session(void)
 		return;
 	}
 
+	int ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+	if (ret != 0) {
+		LOG_WRN("Failed to acquire CCS811 mutex for sampling session: %d", ret);
+		return;
+	}
+
 	ccs811_init_time = k_uptime_get();
 	ccs811_conditioning_complete = false;
+
+	ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_10SEC);
+	if (ret == 0) {
+		ccs811_in_idle_mode = false;
+		LOG_INF("CCS811 running 10s measurements during conditioning");
+	} else {
+		LOG_WRN("Failed to start CCS811 10s conditioning mode: %d", ret);
+	}
+
+	k_mutex_unlock(&ccs811_mutex);
+
 	LOG_INF("CCS811 sampling session started — %u min conditioning begins",
 		CCS811_CONDITIONING_TIME_MS / (60U * 1000U));
 }
@@ -345,12 +378,15 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 		goto exit;
 	}
 
+	ccs811_leave_conditioning_meas_mode();
+
 	/* Wake sensor from idle if in power-save mode */
 	if (ccs811_in_idle_mode) {
 		LOG_INF("CCS811 waking from IDLE for on-demand measurement");
 		int wake_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
 		if (wake_ret == 0) {
 			woke_sensor = true;
+			ccs811_in_idle_mode = false;
 			/* Wait 1.5s for the first 1-second measurement to complete */
 			k_mutex_unlock(&ccs811_mutex);
 			k_msleep((int32_t)CCS811_IDLE_WAKE_DELAY_MS);
