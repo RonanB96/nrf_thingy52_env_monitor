@@ -80,7 +80,7 @@ static K_MUTEX_DEFINE(ccs811_mutex);
 
 static void ccs811_leave_conditioning_meas_mode(void)
 {
-	/* After the timer: 10s mode was started at connect; return to IDLE once ready. */
+	/* Conditioning used 10 s mode; return to IDLE before 1 s on-demand reads. */
 	if (ccs811_dev == NULL || ccs811_in_idle_mode || !ccs811_conditioning_complete) {
 		return;
 	}
@@ -134,9 +134,9 @@ int ccs811_driver_init(const struct device *ccs811_device)
 
 	k_mutex_unlock(&ccs811_mutex);
 
-	LOG_INF("CCS811 driver initialized - conditioning starts on first connected read");
+	LOG_INF("CCS811 driver initialized - 10 s conditioning starts on first GATT connect");
 
-	/* Stay in IDLE until a GATT client triggers a read (connection-driven). */
+	/* IDLE until connect; then 10 s during conditioning, 1 s on-demand reads after. */
 	int mode_ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
 	if (mode_ret != 0) {
 		LOG_WRN("Failed to set initial IDLE mode: %d", mode_ret);
