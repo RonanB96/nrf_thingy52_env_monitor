@@ -51,11 +51,25 @@ static int64_t last_sample_time;
 /* Power management: track whether sensor is in IDLE mode between reads */
 static bool ccs811_in_idle_mode;
 static bool ccs811_ble_connected;
+static bool ccs811_await_first_1s_sample;
 
 static struct k_work_delayable conditioning_work;
 
 /* Thread safety mutex for CCS811 operations */
 static K_MUTEX_DEFINE(ccs811_mutex);
+
+/* Caller must hold ccs811_mutex. */
+static int ccs811_enter_1sec_mode(void)
+{
+	int ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
+
+	if (ret == 0) {
+		ccs811_in_idle_mode = false;
+		ccs811_await_first_1s_sample = true;
+	}
+
+	return ret;
+}
 
 static void ccs811_start_boot_conditioning(void)
 {
@@ -93,9 +107,8 @@ static void ccs811_conditioning_work_handler(struct k_work *work)
 	LOG_INF("CCS811 boot conditioning complete");
 
 	if (ccs811_ble_connected) {
-		ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
+		ret = ccs811_enter_1sec_mode();
 		if (ret == 0) {
-			ccs811_in_idle_mode = false;
 			LOG_INF("CCS811 connected: 1 s mode");
 		}
 	} else {
@@ -172,6 +185,7 @@ int ccs811_driver_init(const struct device *ccs811_device)
 	first_sample_obtained = false;
 	ccs811_in_idle_mode = false;
 	ccs811_ble_connected = false;
+	ccs811_await_first_1s_sample = false;
 	cached_co2_ppm = 0;
 	cached_tvoc_ppb = 0;
 	last_sample_time = 0;
@@ -223,9 +237,8 @@ void ccs811_driver_on_connected(void)
 	ccs811_ble_connected = true;
 
 	if (ccs811_conditioning_complete) {
-		ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_1SEC);
+		ret = ccs811_enter_1sec_mode();
 		if (ret == 0) {
-			ccs811_in_idle_mode = false;
 			LOG_INF("CCS811 BLE connected: 1 s mode");
 		} else {
 			LOG_WRN("CCS811 failed to enter 1 s mode on connect: %d", ret);
@@ -248,6 +261,13 @@ void ccs811_driver_on_disconnected(void)
 	}
 
 	ccs811_ble_connected = false;
+	ccs811_await_first_1s_sample = false;
+
+	if (!ccs811_conditioning_complete) {
+		LOG_INF("CCS811 disconnect during boot conditioning; staying in 10 s mode");
+		k_mutex_unlock(&ccs811_mutex);
+		return;
+	}
 
 	ret = ccs811_mode_update(ccs811_dev, CCS811_MEASUREMENT_IDLE);
 	if (ret == 0) {
@@ -448,6 +468,26 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 		goto exit;
 	}
 
+	/*
+	 * 1 s mode needs a full sample period after leaving IDLE. Wait here
+	 * (connect-time AQ read) so the later GATT characteristic read has data.
+	 */
+	if (ccs811_await_first_1s_sample) {
+		LOG_INF("CCS811 waiting %u ms for first 1 s sample after wake",
+			CCS811_IDLE_WAKE_DELAY_MS);
+		k_mutex_unlock(&ccs811_mutex);
+		mutex_locked = false;
+		k_msleep((int32_t)CCS811_IDLE_WAKE_DELAY_MS);
+		ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+		if (ret != 0) {
+			LOG_ERR("Failed to re-acquire CCS811 mutex after 1 s wake: %d", ret);
+			ccs811_await_first_1s_sample = false;
+			goto exit;
+		}
+		mutex_locked = true;
+		ccs811_await_first_1s_sample = false;
+	}
+
 	/* Update environmental data if provided and valid */
 	if (!isnan(temp_celsius) && !isnan(humidity_percent) &&
 	    temp_celsius >= CCS811_ENV_TEMP_MIN_C && temp_celsius <= CCS811_ENV_TEMP_MAX_C &&
@@ -511,6 +551,13 @@ int ccs811_driver_read_air_quality(uint16_t *co2_ppm, uint16_t *tvoc_ppb, float 
 		ret = sensor_channel_get(ccs811_dev, SENSOR_CHAN_CO2, &co2_val);
 		if (ret == 0) {
 			/* Validate CO2 reading is within reasonable bounds */
+			if (co2_val.val1 == 0) {
+				/* 0 ppm is below the CCS811 floor; treat as not ready, not range.
+				 */
+				LOG_DBG("CCS811 eCO2 0 ppm (not ready)");
+				ret = -EAGAIN;
+				goto exit;
+			}
 			if (co2_val.val1 >= CCS811_ECO2_MIN_PPM &&
 			    co2_val.val1 <= CCS811_ECO2_MAX_PPM) {
 				*co2_ppm = (uint16_t)co2_val.val1;
