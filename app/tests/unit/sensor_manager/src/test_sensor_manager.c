@@ -215,6 +215,8 @@ ZTEST(sensor_manager, test_pre_f_pre_init_getters_return_zero)
 	zassert_equal(sensor_manager_get_eco2(), 0U);
 	zassert_equal(sensor_manager_get_tvoc(), 0U);
 	zassert_equal(sensor_manager_get_battery_level(), 0U);
+	zassert_false(sensor_manager_is_armed());
+	zassert_equal(sensor_manager_get_connection_count(), 0U);
 }
 
 ZTEST(sensor_manager, test_pre_g_on_disconnected_no_count_is_safe)
@@ -488,6 +490,8 @@ ZTEST(sensor_manager, test_s03_on_connected_after_arm_does_env_then_aq_update)
 	battery_service_get_level_fake.call_count = 0;
 
 	zassert_equal(sensor_manager_on_connected(), 0);
+	zassert_equal(sensor_manager_get_connection_count(), 1U);
+	zassert_true(sensor_manager_is_armed());
 	zassert_equal(ccs811_driver_on_connected_fake.call_count, 1,
 		      "connect must notify CCS811 driver");
 
@@ -505,6 +509,7 @@ ZTEST(sensor_manager, test_s03_on_connected_after_arm_does_env_then_aq_update)
 	/* Bring the connection counter back to zero so subsequent tests start
 	 * from a clean lifecycle state. */
 	sensor_manager_on_disconnected();
+	zassert_equal(sensor_manager_get_connection_count(), 0U);
 }
 
 ZTEST(sensor_manager, test_s04_on_disconnected_stops_further_reads_until_reconnect)

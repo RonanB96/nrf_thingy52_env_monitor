@@ -8,6 +8,7 @@
 #define UPTIME_SERVICE_H_
 
 #include <stdint.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,6 +55,13 @@ int uptime_service_update(void);
  * @return Current uptime in seconds since boot
  */
 uint64_t uptime_service_get_uptime_seconds(void);
+
+/**
+ * @brief Invoke the uptime characteristic read handler with no ATT connection.
+ *
+ * @return byte count on success, negative ATT/errno on failure.
+ */
+ssize_t uptime_service_local_read(void *buf, uint16_t len);
 
 #ifdef __cplusplus
 }

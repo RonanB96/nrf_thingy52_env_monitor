@@ -25,3 +25,21 @@ tests:
       - bluetooth
       - ci_build
       - sysbuild
+  thingy52.env_monitor.hil.shell:
+    platform_allow:
+      - thingy52/nrf52832
+    integration_platforms:
+      - thingy52/nrf52832
+    extra_args:
+      - EXTRA_CONF_FILE=shell.conf
+    harness: pytest
+    harness_config:
+      pytest_root:
+        - tests/hardware_shell/pytest
+      pytest_dut_scope: session
+    timeout: 300
+    min_ram: 48
+    tags:
+      - hil
+      - shell
+      - gatt

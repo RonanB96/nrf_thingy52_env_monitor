@@ -171,6 +171,28 @@ int ccs811_driver_get_mode(void);
  */
 int ccs811_driver_set_mode(enum ccs811_measurement_mode mode);
 
+/**
+ * @brief Snapshot of CCS811 power and connect state.
+ *
+ * Does not change mode or trigger a sample.
+ */
+struct ccs811_debug_state {
+	bool ready;
+	bool enabled;
+	bool idle;
+	bool ble_connected;
+	bool await_first_1s_sample;
+	int mode;
+	int64_t conditioning_remaining_ms;
+};
+
+/**
+ * @brief Fill @p out with the current CCS811 debug snapshot.
+ *
+ * @return 0 on success, negative errno on failure.
+ */
+int ccs811_driver_get_debug_state(struct ccs811_debug_state *out);
+
 #ifdef __cplusplus
 }
 #endif

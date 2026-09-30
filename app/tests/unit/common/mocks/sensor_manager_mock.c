@@ -22,3 +22,5 @@ DEFINE_FAKE_VALUE_FUNC(uint16_t, sensor_manager_get_eco2);
 DEFINE_FAKE_VALUE_FUNC(uint16_t, sensor_manager_get_tvoc);
 DEFINE_FAKE_VALUE_FUNC(uint8_t, sensor_manager_get_battery_level);
 DEFINE_FAKE_VOID_FUNC(sensor_manager_update_air_quality_for_ble);
+DEFINE_FAKE_VALUE_FUNC(uint32_t, sensor_manager_get_connection_count);
+DEFINE_FAKE_VALUE_FUNC(bool, sensor_manager_is_armed);

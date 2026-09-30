@@ -12,6 +12,7 @@ basic build and flash. See [README.md](README.md) for the end-user quick-start.
 - [Code Style and Formatting](#code-style-and-formatting)
 - [Static Analysis](#static-analysis)
 - [Testing](#testing)
+- [GATT-path debug shell](#gatt-path-debug-shell)
 - [AI Agent Hardware Interaction](#ai-agent-hardware-interaction)
 - [CI Pipeline](#ci-pipeline)
 - [Contributing Workflow](#contributing-workflow)
@@ -272,6 +273,41 @@ source .venv/bin/activate && source env.sh
   --inline-logs
 ```
 
+### GATT-path shell HIL
+
+These tests flash the production app with `shell.conf` and drive `app gatt` /
+`app sm` over UART. Do not run them while a live BLE client is connected.
+
+`--hardware-map` and `--device-serial` cannot be combined in this Twister
+version; pass the board with `-p` and the UART with `--device-serial`.
+
+```bash
+source .venv/bin/activate && source env.sh
+eval "$(scripts/resolve_serial_port.sh --export)"
+./modules/zephyr/scripts/twister \
+  -T app \
+  -s thingy52.env_monitor.hil.shell \
+  -p thingy52/nrf52832 \
+  --device-testing \
+  --west-flash="--runner=jlink" \
+  --device-serial "$SERIAL_PORT" \
+  --device-serial-baud 115200 \
+  --inline-logs
+```
+
+Offline parser tests (no hardware):
+
+```bash
+pytest app/tests/hardware_shell/test_shell_output_unit.py
+```
+
+If the shell image is already flashed, the same cases can run over pyserial:
+
+```bash
+eval "$(scripts/resolve_serial_port.sh --export)"
+pytest app/tests/hardware_shell/test_app_shell_serial.py
+```
+
 ### Writing a New Test
 
 Test files follow the same Zephyr C coding style as application sources:
@@ -368,6 +404,50 @@ on-device gcov).
 
 > Requires `lcov` ≥ 1.14 (intermediate text format support, per the
 > Zephyr coverage docs).
+
+---
+
+## GATT-path debug shell
+
+An opt-in UART shell that drives the **same application callbacks** a BLE central
+uses (connect sampling, per-characteristic GATT reads, CCC, disconnect). It does
+not stop advertising and does not use `CONFIG_BT_SHELL` / `CONFIG_SENSOR_SHELL`.
+
+Default firmware leaves the shell off. Build it with:
+
+```bash
+source .venv/bin/activate
+source env.sh
+west build -p always app -d app/build -- -DEXTRA_CONF_FILE=shell.conf
+```
+
+Attach to the existing FTDI debug UART (P0.02/P0.03, 115200):
+
+```bash
+eval "$(scripts/resolve_serial_port.sh --export)"
+picocom -b 115200 "$SERIAL_PORT"
+```
+
+| Command | What it exercises |
+|---------|-------------------|
+| `app gatt connect` | `sensor_manager_on_connected()` + `ble_battery_service_on_connected()` |
+| `app gatt disconnect` | matching `on_disconnected()` |
+| `app gatt read <char>` | ESS/uptime GATT read callbacks (`temp`, `humidity`, `pressure`, `co2`, `tvoc`, `uptime`, `battery`) |
+| `app gatt ccc <char> on\|off` | ESS CCC changed handlers |
+| `app gatt poll [n] [ms]` | temp, humidity, pressure, battery, co2, tvoc |
+| `app sm status` | armed flag, connection count, cached samples |
+| `app ccs811 status` | idle / BLE-connected / mode / conditioning |
+| `app ess status` | encoded cache, `value_known`, CCC flags |
+| `app board pins` | `board_print_pin_states()` |
+
+`app gatt connect` increments the same `connected_count` as a real BLE client.
+Do not mix a live Home Assistant session with a shell-simulated connect when
+reproducing a single-client stall — the firmware will treat them as two clients.
+
+The first CCS811 1 s sample after leaving IDLE can block ~1.5 s inside a GATT
+read; the shell thread blocks the same way a central's ATT read would.
+
+HIL coverage is under [GATT-path shell HIL](#gatt-path-shell-hil).
 
 ---
 

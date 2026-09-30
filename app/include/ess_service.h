@@ -7,8 +7,9 @@
 #ifndef ESS_SERVICE_H_
 #define ESS_SERVICE_H_
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -92,6 +93,48 @@ int ess_service_get_co2(void);
  * @return TVOC concentration in ppb
  */
 int ess_service_get_tvoc(void);
+
+/**
+ * @brief ESS characteristic identifiers.
+ */
+enum ess_char_id {
+	ESS_CHAR_TEMPERATURE = 0,
+	ESS_CHAR_HUMIDITY,
+	ESS_CHAR_PRESSURE,
+	ESS_CHAR_CO2,
+	ESS_CHAR_TVOC,
+	ESS_CHAR_COUNT,
+};
+
+/**
+ * @brief Cached ESS characteristic snapshot (no sensor I/O).
+ */
+struct ess_char_status {
+	int32_t value;
+	bool notify_enabled;
+	bool value_known;
+};
+
+/**
+ * @brief Invoke the characteristic read handler with no ATT connection.
+ *
+ * @return byte count on success, negative ATT/errno on failure.
+ */
+ssize_t ess_service_local_read(enum ess_char_id id, void *buf, uint16_t len);
+
+/**
+ * @brief Invoke the CCC changed handler (notify on or off).
+ *
+ * @return 0 on success, -EINVAL for an unknown id.
+ */
+int ess_service_local_ccc(enum ess_char_id id, bool notify);
+
+/**
+ * @brief Copy cached status for one ESS characteristic (no sensor I/O).
+ *
+ * @return 0 on success, negative errno on failure.
+ */
+int ess_service_get_char_status(enum ess_char_id id, struct ess_char_status *out);
 
 #ifdef __cplusplus
 }

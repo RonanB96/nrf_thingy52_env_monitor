@@ -136,14 +136,13 @@ ZTEST(uptime_service, test_read_callback_emits_le_uint64_seconds)
 
 	ssize_t n = value_attr->read(NULL, value_attr, buf, sizeof(buf), 0);
 
-	zassert_equal(n, (ssize_t)sizeof(uint64_t),
-		      "read should return sizeof(uint64_t), got %zd", n);
+	zassert_equal(n, (ssize_t)sizeof(uint64_t), "read should return sizeof(uint64_t), got %zd",
+		      n);
 	zassert_equal(bt_gatt_attr_read_fake.call_count, 1,
 		      "bt_gatt_attr_read must be called exactly once, got %u",
 		      bt_gatt_attr_read_fake.call_count);
 	zassert_equal(bt_gatt_attr_read_fake.arg6_val, sizeof(uint64_t),
-		      "value_len arg must be 8, got %u",
-		      bt_gatt_attr_read_fake.arg6_val);
+		      "value_len arg must be 8, got %u", bt_gatt_attr_read_fake.arg6_val);
 
 	/* The wire-format contract for MY code: the value handed to bt_gatt_attr_read
 	 * is the LE-encoded uptime in seconds. Decode the captured buffer and assert
@@ -158,4 +157,15 @@ ZTEST(uptime_service, test_read_callback_emits_le_uint64_seconds)
 	zassert_true(decoded == now || decoded + 1ULL == now,
 		     "wire-encoded seconds %llu does not match getter %llu",
 		     (unsigned long long)decoded, (unsigned long long)now);
+}
+
+ZTEST(uptime_service, test_local_read_matches_attr_walk)
+{
+	zassert_equal(uptime_service_init(), 0, "init prerequisite");
+
+	uint8_t buf[sizeof(uint64_t)] = {0};
+	ssize_t n = uptime_service_local_read(buf, sizeof(buf));
+
+	zassert_equal(n, (ssize_t)sizeof(uint64_t), "local_read size mismatch, got %zd", n);
+	zassert_equal(uptime_service_local_read(NULL, sizeof(buf)), -EINVAL);
 }

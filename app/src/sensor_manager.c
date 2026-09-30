@@ -575,3 +575,13 @@ uint8_t sensor_manager_get_battery_level(void)
 {
 	return (current_data.valid_mask & SENSOR_BATTERY) != 0 ? current_data.battery_level : 0;
 }
+
+uint32_t sensor_manager_get_connection_count(void)
+{
+	return connected_count;
+}
+
+bool sensor_manager_is_armed(void)
+{
+	return armed;
+}

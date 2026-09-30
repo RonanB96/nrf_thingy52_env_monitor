@@ -82,6 +82,11 @@ jobs:
                     -p native_sim \
                     --inline-logs
 
+            - name: Run offline shell parser tests
+              run: |
+                  pip install pytest
+                  pytest app/tests/hardware_shell/test_shell_output_unit.py -q
+
             - name: Upload test outputs
               if: always() && !env.ACT
               uses: actions/upload-artifact@v7
