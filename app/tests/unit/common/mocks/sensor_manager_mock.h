@@ -31,7 +31,9 @@
 	FAKE(sensor_manager_get_eco2)                                                              \
 	FAKE(sensor_manager_get_tvoc)                                                              \
 	FAKE(sensor_manager_get_battery_level)                                                     \
-	FAKE(sensor_manager_update_air_quality_for_ble)
+	FAKE(sensor_manager_update_air_quality_for_ble)                                            \
+	FAKE(sensor_manager_get_connection_count)                                                  \
+	FAKE(sensor_manager_is_armed)
 
 DECLARE_FAKE_VALUE_FUNC(int, sensor_manager_init);
 DECLARE_FAKE_VALUE_FUNC(int, sensor_manager_get_data, struct sensor_data *);
@@ -49,5 +51,7 @@ DECLARE_FAKE_VALUE_FUNC(uint16_t, sensor_manager_get_eco2);
 DECLARE_FAKE_VALUE_FUNC(uint16_t, sensor_manager_get_tvoc);
 DECLARE_FAKE_VALUE_FUNC(uint8_t, sensor_manager_get_battery_level);
 DECLARE_FAKE_VOID_FUNC(sensor_manager_update_air_quality_for_ble);
+DECLARE_FAKE_VALUE_FUNC(uint32_t, sensor_manager_get_connection_count);
+DECLARE_FAKE_VALUE_FUNC(bool, sensor_manager_is_armed);
 
 #endif /* APP_TESTS_UNIT_COMMON_MOCKS_SENSOR_MANAGER_H_ */

@@ -35,4 +35,14 @@ config SENSOR_AIR_QUALITY_DIVISOR
 	help
 	  CCS811 is read once every N intervals of SENSOR_ENV_INTERVAL_SEC.
 
+config APP_SHELL
+	bool "GATT-path debug shell"
+	default n
+	select SHELL
+	select SHELL_BACKEND_SERIAL
+	help
+	  UART shell that invokes the same connect, characteristic-read, CCC,
+	  and disconnect application paths a BLE central uses. Leave disabled
+	  in production firmware.
+
 source "Kconfig.zephyr"

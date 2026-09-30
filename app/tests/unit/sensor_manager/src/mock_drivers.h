@@ -74,8 +74,8 @@ DECLARE_FAKE_VALUE_FUNC(int, ccs811_driver_set_mode, enum ccs811_measurement_mod
 	FAKE(lps22hb_driver_is_enabled)                                                            \
 	FAKE(lps22hb_driver_read_pressure)                                                         \
 	FAKE(ccs811_driver_init)                                                                   \
-	FAKE(ccs811_driver_on_connected)                                                         \
-	FAKE(ccs811_driver_on_disconnected)                                                      \
+	FAKE(ccs811_driver_on_connected)                                                           \
+	FAKE(ccs811_driver_on_disconnected)                                                        \
 	FAKE(ccs811_driver_is_ready)                                                               \
 	FAKE(ccs811_driver_conditioning_time_remaining)                                            \
 	FAKE(ccs811_driver_save_baseline)                                                          \

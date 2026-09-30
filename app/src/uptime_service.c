@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <errno.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -94,4 +95,22 @@ uint64_t uptime_service_get_uptime_seconds(void)
 	 * For long-running uptime in seconds, current approach is optimal
 	 */
 	return k_uptime_get() / MS_PER_SEC;
+}
+
+/* VALUE attribute follows PRIMARY_SERVICE and the CHRC declaration. */
+#define UPTIME_VALUE_ATTR_IDX 2
+
+ssize_t uptime_service_local_read(void *buf, uint16_t len)
+{
+	const struct bt_gatt_attr *attr = &attr_uptime_svc[UPTIME_VALUE_ATTR_IDX];
+
+	if (buf == NULL) {
+		return -EINVAL;
+	}
+
+	if (attr->read == NULL) {
+		return -ENOTSUP;
+	}
+
+	return attr->read(NULL, attr, buf, len, 0);
 }

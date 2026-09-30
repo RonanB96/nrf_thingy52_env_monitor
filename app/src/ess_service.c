@@ -866,3 +866,90 @@ int ess_service_get_tvoc(void)
 {
 	return tvoc_sensor.value_known ? tvoc_sensor.value : -ENODATA;
 }
+
+/* Characteristic VALUE attr is the CHRC declaration index plus one. */
+static const uint8_t ess_value_attr_idx[ESS_CHAR_COUNT] = {
+	[ESS_CHAR_TEMPERATURE] = ESS_ATTR_IDX_TEMPERATURE + 1,
+	[ESS_CHAR_HUMIDITY] = ESS_ATTR_IDX_HUMIDITY + 1,
+	[ESS_CHAR_PRESSURE] = ESS_ATTR_IDX_PRESSURE + 1,
+	[ESS_CHAR_CO2] = ESS_ATTR_IDX_CO2 + 1,
+	[ESS_CHAR_TVOC] = ESS_ATTR_IDX_TVOC + 1,
+};
+
+static struct ess_sensor *ess_sensor_from_id(enum ess_char_id id)
+{
+	switch (id) {
+	case ESS_CHAR_TEMPERATURE:
+		return &temperature_sensor;
+	case ESS_CHAR_HUMIDITY:
+		return &humidity_sensor;
+	case ESS_CHAR_PRESSURE:
+		return &pressure_sensor;
+	case ESS_CHAR_CO2:
+		return &co2_sensor;
+	case ESS_CHAR_TVOC:
+		return &tvoc_sensor;
+	default:
+		return NULL;
+	}
+}
+
+ssize_t ess_service_local_read(enum ess_char_id id, void *buf, uint16_t len)
+{
+	const struct bt_gatt_attr *attr;
+
+	if (id >= ESS_CHAR_COUNT || buf == NULL) {
+		return -EINVAL;
+	}
+
+	attr = &ess_svc.attrs[ess_value_attr_idx[id]];
+	if (attr->read == NULL) {
+		return -ENOTSUP;
+	}
+
+	return attr->read(NULL, attr, buf, len, 0);
+}
+
+int ess_service_local_ccc(enum ess_char_id id, bool notify)
+{
+	uint16_t value = notify ? BT_GATT_CCC_NOTIFY : 0;
+
+	switch (id) {
+	case ESS_CHAR_TEMPERATURE:
+		temp_ccc_cfg_changed(NULL, value);
+		return 0;
+	case ESS_CHAR_HUMIDITY:
+		humidity_ccc_cfg_changed(NULL, value);
+		return 0;
+	case ESS_CHAR_PRESSURE:
+		pressure_ccc_cfg_changed(NULL, value);
+		return 0;
+	case ESS_CHAR_CO2:
+		co2_ccc_cfg_changed(NULL, value);
+		return 0;
+	case ESS_CHAR_TVOC:
+		tvoc_ccc_cfg_changed(NULL, value);
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+int ess_service_get_char_status(enum ess_char_id id, struct ess_char_status *out)
+{
+	const struct ess_sensor *sensor;
+
+	if (out == NULL) {
+		return -EINVAL;
+	}
+
+	sensor = ess_sensor_from_id(id);
+	if (sensor == NULL) {
+		return -EINVAL;
+	}
+
+	out->value = sensor->value;
+	out->notify_enabled = sensor->notify_enabled;
+	out->value_known = sensor->value_known;
+	return 0;
+}

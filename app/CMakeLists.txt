@@ -26,6 +26,11 @@ target_sources(app PRIVATE
 	src/uptime_service.c
 	src/device_naming.c
 	)
+
+if(CONFIG_APP_SHELL)
+	target_sources(app PRIVATE src/app_shell.c)
+endif()
+
 target_include_directories(app PRIVATE include)
 
 # Add ST register API includes for HTS221 direct register access

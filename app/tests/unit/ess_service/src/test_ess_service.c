@@ -41,8 +41,8 @@ extern const struct bt_gatt_service_static ess_svc;
 #define ESS_VAL_CO2         20
 #define ESS_VAL_TVOC        26
 
-#define ESS_DESC_TEMP_MEAS  3  /* ES Measurement descriptor for temperature */
-#define ESS_DESC_TEMP_RANGE 5  /* Valid Range descriptor for temperature */
+#define ESS_DESC_TEMP_MEAS  3 /* ES Measurement descriptor for temperature */
+#define ESS_DESC_TEMP_RANGE 5 /* Valid Range descriptor for temperature */
 
 /* Capture the buffer/value pair handed to bt_gatt_attr_read so tests can
  * assert what the service serialised on the wire.
@@ -168,8 +168,8 @@ ZTEST(ess_service, test_update_humidity_propagates_to_getter)
 	zassert_equal(ess_service_update(&data), 0, "update must succeed");
 
 	/* 42.0 % in 0.01 % units = 4200 */
-	zassert_equal(ess_service_get_humidity(), 4200,
-		      "humidity getter mismatch, got %d", ess_service_get_humidity());
+	zassert_equal(ess_service_get_humidity(), 4200, "humidity getter mismatch, got %d",
+		      ess_service_get_humidity());
 }
 
 ZTEST(ess_service, test_update_pressure_propagates_to_getter)
@@ -286,8 +286,7 @@ ZTEST(ess_service, test_read_pressure_triggers_pressure_fetch)
 	zassert_equal(sensor_manager_update_selective_fake.call_count, 1,
 		      "must trigger one selective update");
 	zassert_equal(sensor_manager_update_selective_fake.arg0_val,
-		      (enum sensor_select)SENSOR_PRESSURE,
-		      "must request PRESSURE only");
+		      (enum sensor_select)SENSOR_PRESSURE, "must request PRESSURE only");
 }
 
 ZTEST(ess_service, test_read_co2_when_not_ready_reports_unknown)
@@ -306,8 +305,7 @@ ZTEST(ess_service, test_read_co2_when_not_ready_reports_unknown)
 	 * be the BT SIG "value not known" sentinel 0xFFFF, little-endian. */
 	uint16_t wire = sys_get_le16(buf);
 	zassert_equal(wire, ESS_UNKNOWN_U16,
-		      "on-the-wire CO2 must be 0xFFFF when CCS811 not ready, got 0x%04x",
-		      wire);
+		      "on-the-wire CO2 must be 0xFFFF when CCS811 not ready, got 0x%04x", wire);
 	zassert_equal(ess_service_get_co2(), ESS_UNKNOWN_U16,
 		      "CO2 getter must agree with wire format");
 	zassert_equal(sensor_manager_update_selective_fake.call_count, 0,
@@ -372,25 +370,24 @@ ZTEST(ess_service, test_read_es_measurement_emits_packed_descriptor)
 	zassert_equal(last_value_len, 11, "captured value len mismatch");
 
 	uint16_t flags = sys_get_le16(&buf[0]);
-	uint8_t  sampling = buf[2];
+	uint8_t sampling = buf[2];
 	uint32_t meas_period = sys_get_le24(&buf[3]);
 	uint32_t upd_interval = sys_get_le24(&buf[6]);
-	uint8_t  application = buf[9];
-	uint8_t  uncertainty = buf[10];
+	uint8_t application = buf[9];
+	uint8_t uncertainty = buf[10];
 
 	/* All values come from temperature_sensor.meas in ess_service.c. */
 	zassert_equal(flags, 0, "flags field must be 0 (RFU), got 0x%04x", flags);
-	zassert_equal(sampling, 0x01,
-		      "sampling function must be INSTANTANEOUS (0x01), got 0x%02x", sampling);
-	zassert_equal(meas_period, 0U,
-		      "measurement period must be 0 (on-demand), got %u", meas_period);
-	zassert_equal(upd_interval, 0U,
-		      "update interval must be 0 (no fixed interval), got %u", upd_interval);
-	zassert_equal(application, 0x14,
-		      "application must be ESS_APP_INDOOR (0x14), got 0x%02x", application);
+	zassert_equal(sampling, 0x01, "sampling function must be INSTANTANEOUS (0x01), got 0x%02x",
+		      sampling);
+	zassert_equal(meas_period, 0U, "measurement period must be 0 (on-demand), got %u",
+		      meas_period);
+	zassert_equal(upd_interval, 0U, "update interval must be 0 (no fixed interval), got %u",
+		      upd_interval);
+	zassert_equal(application, 0x14, "application must be ESS_APP_INDOOR (0x14), got 0x%02x",
+		      application);
 	zassert_equal(uncertainty, 0x32,
-		      "temperature uncertainty must be 0x32 (±0.50°C), got 0x%02x",
-		      uncertainty);
+		      "temperature uncertainty must be 0x32 (±0.50°C), got 0x%02x", uncertainty);
 }
 
 ZTEST(ess_service, test_read_valid_range_u16_for_temperature)
@@ -412,9 +409,60 @@ ZTEST(ess_service, test_read_valid_range_u16_for_temperature)
 	int16_t upper = (int16_t)sys_get_le16(&buf[2]);
 
 	zassert_equal(lower, ESS_TEMP_MIN_E_2C,
-		      "lower bound must be ESS_TEMP_MIN_E_2C (%d), got %d",
-		      ESS_TEMP_MIN_E_2C, lower);
+		      "lower bound must be ESS_TEMP_MIN_E_2C (%d), got %d", ESS_TEMP_MIN_E_2C,
+		      lower);
 	zassert_equal(upper, ESS_TEMP_MAX_E_2C,
-		      "upper bound must be ESS_TEMP_MAX_E_2C (%d), got %d",
-		      ESS_TEMP_MAX_E_2C, upper);
+		      "upper bound must be ESS_TEMP_MAX_E_2C (%d), got %d", ESS_TEMP_MAX_E_2C,
+		      upper);
+}
+
+ZTEST(ess_service, test_local_read_temperature_matches_attr_walk)
+{
+	zassert_equal(ess_service_init(), 0, "init prerequisite");
+	sensor_manager_update_selective_fake.return_val = 0;
+	fake_sensor_snapshot.temperature = 19.75f;
+	fake_sensor_snapshot.humidity = 33.0f;
+	fake_sensor_snapshot.valid_mask = SENSOR_TEMP_HUMIDITY;
+
+	uint8_t buf[2] = {0};
+	ssize_t n = ess_service_local_read(ESS_CHAR_TEMPERATURE, buf, sizeof(buf));
+
+	zassert_equal(n, (ssize_t)sizeof(uint16_t), "expected 2-byte read, got %zd", n);
+	zassert_equal(sensor_manager_update_selective_fake.call_count, 1,
+		      "local_read must use the GATT read callback path");
+	zassert_equal(sensor_manager_update_selective_fake.arg0_val,
+		      (enum sensor_select)SENSOR_TEMP_HUMIDITY,
+		      "must request TEMP+HUMIDITY together");
+	zassert_equal((int16_t)sys_get_le16(buf), 1975, "decoded value mismatch");
+}
+
+ZTEST(ess_service, test_local_read_rejects_bad_id)
+{
+	uint8_t buf[2];
+
+	zassert_equal(ess_service_local_read(ESS_CHAR_COUNT, buf, sizeof(buf)), -EINVAL);
+	zassert_equal(ess_service_local_read(ESS_CHAR_TEMPERATURE, NULL, 2), -EINVAL);
+}
+
+ZTEST(ess_service, test_local_ccc_enables_notify_on_update)
+{
+	zassert_equal(ess_service_init(), 0, "init prerequisite");
+	zassert_equal(ess_service_local_ccc(ESS_CHAR_TEMPERATURE, true), 0);
+
+	struct ess_char_status st;
+	zassert_equal(ess_service_get_char_status(ESS_CHAR_TEMPERATURE, &st), 0);
+	zassert_true(st.notify_enabled, "CCC on must set notify_enabled");
+
+	struct sensor_data data = {
+		.valid_mask = SENSOR_TEMPERATURE,
+		.temperature = 22.0f,
+	};
+	zassert_equal(ess_service_update(&data), 0, "update must succeed");
+	zassert_true(bt_gatt_notify_cb_fake.call_count >= 1U,
+		     "CCC-enabled update must attempt notify, got %u",
+		     bt_gatt_notify_cb_fake.call_count);
+
+	zassert_equal(ess_service_local_ccc(ESS_CHAR_TEMPERATURE, false), 0);
+	zassert_equal(ess_service_get_char_status(ESS_CHAR_TEMPERATURE, &st), 0);
+	zassert_false(st.notify_enabled, "CCC off must clear notify_enabled");
 }

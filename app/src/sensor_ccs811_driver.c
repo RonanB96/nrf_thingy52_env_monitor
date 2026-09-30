@@ -5,6 +5,7 @@
  */
 
 #include "sensor_ccs811_driver.h"
+#include <errno.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -130,8 +131,7 @@ static void ccs811_conditioning_work_handler(struct k_work *work)
 static uint16_t stored_baseline;
 static int64_t last_baseline_save;
 static int64_t last_baseline_load;
-static const int64_t BASELINE_SAVE_INTERVAL_MS = (24LL * 60LL * 60LL * 1000LL);       /* 24 hours */
-static const int64_t BASELINE_LOAD_INTERVAL_MS = (7LL * 24LL * 60LL * 60LL * 1000LL); /* 7 days */
+static const int64_t BASELINE_SAVE_INTERVAL_MS = (24LL * 60LL * 60LL * 1000LL); /* 24 hours */
 
 #define CCS811_SETTINGS_KEY "ccs811/baseline"
 
@@ -694,4 +694,30 @@ int ccs811_driver_get_mode(void)
 
 	LOG_DBG("CCS811 current mode: 0x%02x", current_mode);
 	return current_mode;
+}
+
+int ccs811_driver_get_debug_state(struct ccs811_debug_state *out)
+{
+	int ret;
+
+	if (out == NULL) {
+		return -EINVAL;
+	}
+
+	memset(out, 0, sizeof(*out));
+	out->ready = ccs811_driver_is_ready();
+	out->enabled = ccs811_driver_is_enabled();
+	out->conditioning_remaining_ms = ccs811_driver_conditioning_time_remaining();
+	out->mode = ccs811_driver_get_mode();
+
+	ret = k_mutex_lock(&ccs811_mutex, K_MSEC(CCS811_MUTEX_TIMEOUT_MS));
+	if (ret != 0) {
+		return ret;
+	}
+
+	out->idle = ccs811_in_idle_mode;
+	out->ble_connected = ccs811_ble_connected;
+	out->await_first_1s_sample = ccs811_await_first_1s_sample;
+	k_mutex_unlock(&ccs811_mutex);
+	return 0;
 }

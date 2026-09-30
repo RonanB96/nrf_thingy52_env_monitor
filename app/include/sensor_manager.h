@@ -175,6 +175,16 @@ uint8_t sensor_manager_get_battery_level(void);
  */
 void sensor_manager_update_air_quality_for_ble(void);
 
+/**
+ * @brief Number of tracked GATT connections.
+ */
+uint32_t sensor_manager_get_connection_count(void);
+
+/**
+ * @brief True after sensor_manager_arm() has succeeded.
+ */
+bool sensor_manager_is_armed(void);
+
 #ifdef __cplusplus
 }
 #endif
