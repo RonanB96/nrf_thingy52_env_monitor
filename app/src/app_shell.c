@@ -428,7 +428,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD_ARG(read, NULL, "<temp|humidity|pressure|co2|tvoc|uptime|battery>", cmd_gatt_read,
 		      2, 0),
 	SHELL_CMD_ARG(ccc, NULL, "<temp|humidity|pressure|co2|tvoc> <on|off>", cmd_gatt_ccc, 3, 0),
-	SHELL_CMD_ARG(poll, NULL, "[count] [interval_ms]  temp, humidity, pressure, battery, co2, tvoc",
+	SHELL_CMD_ARG(poll, NULL,
+		      "[count] [interval_ms]  temp, humidity, pressure, battery, co2, tvoc",
 		      cmd_gatt_poll, 1, 2),
 	SHELL_SUBCMD_SET_END);
 
